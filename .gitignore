@@ -1,0 +1,4 @@
+jetson-venv/
+jetson-venv-isolated/
+*.pkl
+database/captured_images/
