@@ -8,5 +8,4 @@ database/captured_images/
 *.pkl
 
 # mac files
-**/.DS_Store
 .DS_Store
