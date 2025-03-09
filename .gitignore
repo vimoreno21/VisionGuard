@@ -1,4 +1,12 @@
-jetson-venv/
+# initial virtual env
 jetson-venv-isolated/
-*.pkl
+
+# all the images captured by the camera
 database/captured_images/
+
+# files made by deepface model
+*.pkl
+
+# mac files
+**/.DS_Store
+.DS_Store
