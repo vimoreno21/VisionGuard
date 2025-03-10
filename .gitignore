@@ -1,11 +1,19 @@
+# env files
+.env
+
 # initial virtual env
 jetson-venv-isolated/
 
 # all the images captured by the camera
 database/captured_images/
+logs/
 
 # files made by deepface model
 *.pkl
 
 # mac files
 .DS_Store
+
+other/
+
+**/__pycache__/
