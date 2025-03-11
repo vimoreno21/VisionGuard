@@ -5,7 +5,7 @@ import numpy as np
 from deepface import DeepFace
 
 from utils.directories import EMBEDDINGS_DIR, DB_PATHS
-from utils.photo_utils import get_person_name_from_path
+from utils.photo_utils import findCosineDistance
 
 # Global variables to store precomputed embeddings
 reference_embeddings = {}
@@ -34,7 +34,8 @@ def load_saved_embeddings(model_name):
             average_embeddings = pickle.load(f)
         print(f"Loaded embeddings for {len(reference_embeddings)} images")
         return reference_embeddings, average_embeddings
-    
+    else:
+        print("Embedding paths don't exist", embeddings_path, " ", avg_embeddings_path)
     return None, None
 
 def save_embeddings(reference_embeddings, average_embeddings, model_name):
@@ -64,28 +65,42 @@ def compute_embedding_for_image(image_path, model_name):
             model_name=model_name,
             enforce_detection=False
         )
-        return embedding
+        return embedding[0]["embedding"] # embedding is a list of a dictionary 
     except Exception as e:
         print(f"Error computing embedding for {image_path}: {e}")
         return None
     
 def compute_average_embeddings(person_embeddings):
     """Compute average embedding for each person"""
-    
+      
     average_embs = {}
+
+    print(f"🔎 Computing average embeddings for {len(person_embeddings)} people...")
     
     for person, embeddings in person_embeddings.items():
-        if embeddings and person != "unknown":
-            # Convert list of embeddings to numpy array for easier manipulation
-            embeddings_array = np.array(embeddings)
-            # Compute average along first dimension (across all embeddings)
-            avg_embedding = np.mean(embeddings_array, axis=0)
-            average_embs[person] = avg_embedding
-            print(f"Created average embedding for {person} from {len(embeddings)} images")
-    
+        if isinstance(embeddings[0], dict):
+            print(f"❌ ERROR: Embeddings for {person} contain dictionaries!")
+            continue  # Skip to prevent crash
+        
+        if not embeddings:  # Skip empty lists
+            print(f"⚠️ Warning: No embeddings found for {person}, skipping.")
+            continue
+        
+        # Convert list to numpy array
+        embeddings_array = np.array(embeddings)
+
+        if embeddings_array.ndim != 2:  # Expecting shape (num_images, embedding_size)
+            print(f"❌ ERROR: Unexpected embedding shape for {person}: {embeddings_array.shape}")
+            continue  # Skip person if embeddings are malformed
+        
+        avg_embedding = np.mean(embeddings_array, axis=0)
+        average_embs[person] = avg_embedding
+
+        print(f"✅ Created average embedding for {person} from {len(embeddings)} images")
+
     return average_embs
 
-def precompute_embeddings(model_name="VGG-Face"):
+def precompute_embeddings(model_name):
     """
     Main function to precompute and save embeddings for all images in the databases
     Returns dictionaries of individual embeddings and average embeddings per person
@@ -100,8 +115,11 @@ def precompute_embeddings(model_name="VGG-Face"):
     if loaded_ref and loaded_avg:
         reference_embeddings = loaded_ref
         average_embeddings = loaded_avg
+        print("Sucessfully loaded precomputed embeddings")
         return reference_embeddings, average_embeddings
-    
+    else:
+        print("No saved embeddings found. Computing now...")
+        print("load_saved_embeddings returned", loaded_avg)
     # Initialize dictionaries
     reference_embeddings = {}
     all_person_embeddings = {}  # To store embeddings grouped by person
@@ -139,7 +157,7 @@ def precompute_embeddings(model_name="VGG-Face"):
     
     return reference_embeddings, average_embeddings
 
-def find_match_with_embeddings(face_img_path, model_name="VGG-Face"):
+def find_match_with_embeddings(face_img_path, model_name):
     """
     Find matching face using precomputed embeddings
     Returns: (identity, distance, match_type) of the best match, or (None, 1.0, None) if no match
@@ -148,6 +166,7 @@ def find_match_with_embeddings(face_img_path, model_name="VGG-Face"):
     
     # Ensure we have embeddings
     if not reference_embeddings or not average_embeddings:
+        print("Did not find precomputed embeddings. Computing now...")
         precompute_embeddings(model_name)
     
     try:
@@ -161,7 +180,7 @@ def find_match_with_embeddings(face_img_path, model_name="VGG-Face"):
         # 1. Compare against individual reference images
         for ref_path, ref_embedding in reference_embeddings.items():
             # Calculate distance (cosine distance)
-            distance = DeepFace.dst.findCosineDistance(face_embedding, ref_embedding)
+            distance = findCosineDistance(face_embedding, ref_embedding)
             
             # Update best match if better
             if distance < best_match[1]:
@@ -170,7 +189,7 @@ def find_match_with_embeddings(face_img_path, model_name="VGG-Face"):
         # 2. Compare against average embeddings (this can be more robust)
         for person, avg_embedding in average_embeddings.items():
             # Calculate distance
-            distance = DeepFace.dst.findCosineDistance(face_embedding, avg_embedding)
+            distance = findCosineDistance(face_embedding, avg_embedding)
             
             # Update best match if better
             if distance < best_match[1]:
@@ -187,28 +206,33 @@ def scan_database(db_path, model_name):
     
     ref_embeddings = {}
     person_embeddings = {}
-    
-    # Walk through the database directory
+
     for root, dirs, files in os.walk(db_path):
         for file in files:
             if file.lower().endswith(('.png', '.jpg', '.jpeg')):
                 image_path = os.path.join(root, file)
-                
-                # Get person name from folder structure
-                person_name = get_person_name_from_path(image_path, db_path)
+
+                # Get person name
+                person_name = os.path.basename(db_path)  
                 
                 # Compute embedding
                 embedding = compute_embedding_for_image(image_path, model_name)
-                
+                 
+
                 if embedding is not None:
-                    # Store individual embedding
                     ref_embeddings[image_path] = embedding
                     
-                    # Group by person
                     if person_name not in person_embeddings:
                         person_embeddings[person_name] = []
-                    person_embeddings[person_name].append(embedding)
+
+                    embedding = np.array(embedding)  # Convert to NumPy array
                     
-                    print(f"Processed: {image_path}")
+                    if embedding.ndim != 1:  # Ensure it's a flat vector
+                        print(f"❌ ERROR: Unexpected embedding shape {embedding.shape} for {image_path}")
+                        continue
+                    
+                    person_embeddings[person_name].append(embedding)
+
+                    print(f"✅ Processed: {image_path} (Person: {person_name}) - Shape: {embedding.shape}")
     
     return ref_embeddings, person_embeddings
