@@ -23,18 +23,18 @@ def setup_camera():
         try:
             # Try to open the camera
             print(f"Attempting to connect to camera: {RTSP_URL}")
-            cap = cv2.VideoCapture(RTSP_URL)
+            
+            # Open the RTSP stream with FFMPEG for better performance
+            cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+
+            # Reduce OpenCV buffer to avoid stale frames
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Keep only 1 frame in buffe
             
             # Check if opened successfully
             if cap.isOpened():
                 # Read a test frame
                 ret, frame = cap.read()
                 if ret:
-                    # Save the first frame for debugging
-                    # first_frame_path = os.path.join(DEBUG_DIR, f"first_frame_{current_timestamp()}.jpg")
-                    # cv2.imwrite(first_frame_path, frame)
-                    # print(f"✅ Camera connected successfully! First frame saved to {first_frame_path}")
-                    
                     # Print frame dimensions
                     height, width, channels = frame.shape
                     print(f"Frame dimensions: {width}x{height}, {channels} channels")

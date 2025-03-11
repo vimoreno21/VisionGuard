@@ -1,20 +1,8 @@
 import datetime
 import cv2
+from scipy.spatial.distance import cosine
 import os
-
-def get_person_name_from_path(image_path, db_path):
-    """Extract person name from image path based on folder structure"""
-    
-    # Extract person name from path (assuming structure: db_path/person_name/image.jpg)
-    relative_path = os.path.relpath(image_path, db_path)
-    parts = relative_path.split(os.path.sep)
-    
-    if len(parts) > 1:
-        person_name = parts[0]  # First folder inside db_path
-    else:
-        person_name = "unknown"
-    
-    return person_name
+import numpy as np
 
 def current_timestamp():
     """Return current timestamp as string"""
@@ -43,3 +31,10 @@ def mark_frame_with_face(frame, location, name=None, confidence=None):
         cv2.putText(marked_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
     
     return marked_frame
+
+
+def findCosineDistance(embedding1, embedding2):
+    """Ensure embeddings are numpy arrays before computing cosine distance."""
+    embedding1 = np.array(embedding1) if not isinstance(embedding1, np.ndarray) else embedding1
+    embedding2 = np.array(embedding2) if not isinstance(embedding2, np.ndarray) else embedding2
+    return cosine(embedding1, embedding2)

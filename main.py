@@ -52,15 +52,9 @@ def main():
         # Precompute face embeddings for faster recognition
         print("Precomputing face embeddings...")
         # You can try different models: "VGG-Face", "Facenet", "Facenet512", "ArcFace"
-        precompute_embeddings(model_name="Facenet512")
+        model_name = "Facenet512"
+        precompute_embeddings(model_name)
         print("Embeddings computation completed")
-        
-        # Add countdown to give time to get in position
-        print("Starting in 10 seconds. Get ready to position yourself...")
-        for i in range(10, 0, -1):
-            print(f"{i}...", end=" ", flush=True)
-            time.sleep(1)
-        print("\nStarting capture now!")
 
         # Initialize camera
         cap = setup_camera()
@@ -77,6 +71,13 @@ def main():
         # Process exactly 1 frame (as in your original code)
         frames_to_process = 1
         frames_processed = 0
+
+        # Add countdown to give time to get in position
+        print("Starting in 10 seconds. Get ready to position yourself...")
+        for i in range(10, 0, -1):
+            print(f"{i}...", end=" ", flush=True)
+            time.sleep(1)
+        print("\nStarting capture now!")
         
         while frames_processed < frames_to_process:
             print(f"Capturing frame {frames_processed + 1}/{frames_to_process}")
@@ -90,7 +91,7 @@ def main():
                 continue
             
             # Process the frame and get the thread if one was created
-            success, thread = process_frame_for_faces(frame, detector, create_thread=True)
+            success, thread = process_frame_for_faces(frame, detector, model_name,create_thread=True)
             
             if thread:
                 processing_threads.append(thread)
