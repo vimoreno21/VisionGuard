@@ -13,13 +13,9 @@ import numpy as np
 import time
 import signal
 from ultralytics import YOLO
-
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from utils.directories import SAVE_DIR
-from camera import setup_camera
 from utils.photo_utils import current_timestamp
-
-# Signal handler for cleaner termination
 stop_program = False
 def signal_handler(sig, frame):
     global stop_program
