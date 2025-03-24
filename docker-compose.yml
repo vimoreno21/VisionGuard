@@ -1,0 +1,47 @@
+services:
+  vision-system:
+    build: .
+    image: vision-system:latest
+    container_name: vision-system
+    runtime: nvidia
+    network_mode: host  # Important for RTSP connections
+    privileged: true
+    restart: unless-stopped
+    devices:
+      - /dev/nvhost-ctrl
+      - /dev/nvhost-ctrl-gpu
+      - /dev/nvhost-prof-gpu
+      - /dev/nvmap
+      - /dev/nvhost-gpu
+      - /dev/nvhost-as-gpu
+      - /dev/nvhost-vic
+      - /dev/nvhost-nvenc  # Critical for H264 encoding
+      - /dev/nvhost-nvdec
+      - /dev/nvhost-nvjpg
+      - /dev/nvhost-msenc
+    volumes:
+      - ./app:/VisionGuard  # Map your entire local repo to the container
+      - /tmp/argus_socket:/tmp/argus_socket
+      - /etc/enctune.conf:/etc/enctune.conf
+      - /tmp/.X11-unix/:/tmp/.X11-unix/
+      # - /usr/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu:ro 
+      - /usr/lib/aarch64-linux-gnu/tegra:/usr/lib/aarch64-linux-gnu/tegra:ro
+      - /usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/aarch64-linux-gnu/gstreamer-1.0:ro
+
+    environment:
+      - DISPLAY=$DISPLAY
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+      - GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/gstreamer-1.0
+      # Add this for better RTSP stability
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|analyzeduration;0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video]
+    command: /bin/bash
+    stdin_open: true  # Keep STDIN open
+    tty: true  # Allocate a pseudo-TTY

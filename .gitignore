@@ -5,8 +5,8 @@
 jetson-venv-isolated/
 
 # all the images captured by the camera
-database/captured_images/
-logs/
+app/database/captured_images/
+app/logs/
 
 # files made by deepface model
 *.pkl

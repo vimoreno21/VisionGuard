@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 from mtcnn import MTCNN
 from camera import setup_camera
-from face_detection import process_frame_for_faces
+from app.face_detection import process_frame_for_faces
 from utils.directories import SAVE_DIR, DEBUG_DIR, DB_PATHS, LOG_FILES_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
 from utils.constants import FRAME_SAVE_INTERVAL, HEADLESS
 
@@ -56,12 +56,6 @@ def main():
         precompute_embeddings(model_name)
         print("Embeddings computation completed")
 
-        # Initialize camera
-        cap = setup_camera()
-        if cap is None:
-            print("Exiting due to camera connection failure")
-            return
-            
         # Initialize face detector
         detector = MTCNN()
         
@@ -78,6 +72,12 @@ def main():
             print(f"{i}...", end=" ", flush=True)
             time.sleep(1)
         print("\nStarting capture now!")
+        
+        # Initialize camera
+        cap = setup_camera()
+        if cap is None:
+            print("Exiting due to camera connection failure")
+            return
         
         while frames_processed < frames_to_process:
             print(f"Capturing frame {frames_processed + 1}/{frames_to_process}")

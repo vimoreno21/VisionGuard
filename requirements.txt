@@ -14,3 +14,4 @@ mtcnn==0.1.1
 retina-face==0.0.17
 fire==0.7.0
 gunicorn==23.0.0
+dotenv

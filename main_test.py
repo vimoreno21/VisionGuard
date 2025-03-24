@@ -5,7 +5,7 @@ from mtcnn import MTCNN
 from deepface import DeepFace
 from utils.photo_utils import current_timestamp
 from utils.directories import SAVE_DIR, DEBUG_DIR, DB_PATHS
-from camera import setup_camera
+from app.camera import setup_camera
 from utils.constants import HEADLESS, MATCH_THRESHOLD
 
 def main():

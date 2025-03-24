@@ -4,10 +4,18 @@ FROM ubuntu:20.04
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/usr/local/cuda/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:${LD_LIBRARY_PATH}"
+# ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
+# ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:/usr/local/cuda/lib64"
+
+
+# Added environment variables for hardware acceleration
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    bash \
     python3-pip \
     python3-dev \
     python3-opencv \
@@ -15,6 +23,23 @@ RUN apt-get update && apt-get install -y \
     libsm6 libxext6 libxrender-dev \
     libhdf5-dev libhdf5-serial-dev \
     hdf5-tools ffmpeg curl wget unzip git \
+    # Added packages for H264 hardware encoding on Jetson
+    libgstreamer1.0-dev \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-tools \
+    gstreamer1.0-libav \
+    python3-gst-1.0 \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libxvidcore-dev \
+    libx264-dev \
+    v4l-utils \
+    python-dotenv==1.0.1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Make sure HDF5 is linked correctly
@@ -30,7 +55,7 @@ RUN pip3 install --no-cache-dir numpy==1.23.5
 # Step 3: Install h5py with proper HDF5 linkage
 RUN HDF5_DIR=/usr/lib/aarch64-linux-gnu/hdf5/serial pip3 install --no-cache-dir h5py==3.8.0 --no-build-isolation
 
-# Step 4: Install Jetson-specific TensorFlow 
+# Step 4: Install Jetson-specific TensorFlow
 RUN pip3 install --no-cache-dir --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v60 tensorflow==2.10.0
 
 # Step 5: Install Keras with matching version
@@ -51,6 +76,7 @@ RUN pip3 install --no-cache-dir \
 
 # Step 7: Install MTCNN after TensorFlow to ensure compatibility
 RUN pip3 install --no-cache-dir mtcnn==0.1.1
+RUN pip3 install --no-cache-dir deep_sort_realtime
 
 # Set working directory (matching your mount point)
 WORKDIR /VisionGuard
