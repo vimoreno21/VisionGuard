@@ -39,8 +39,12 @@ RUN apt-get update && apt-get install -y \
     libxvidcore-dev \
     libx264-dev \
     v4l-utils \
-    python-dotenv==1.0.1 \
     && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir python-dotenv==1.0.1
+
+# Add missing symlink for ffmpeg libffi issue
+RUN ln -s /usr/lib/aarch64-linux-gnu/libffi.so.7 /usr/lib/aarch64-linux-gnu/libffi.so.8
 
 # Make sure HDF5 is linked correctly
 RUN ln -s /usr/lib/aarch64-linux-gnu/hdf5/serial/libhdf5.so /usr/lib/libhdf5.so

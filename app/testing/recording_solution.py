@@ -53,13 +53,19 @@ def record_video(duration=10, output_dir="/tmp"):
     output_file = os.path.join(output_dir, f"recording_{timestamp}.mp4")
     
     # Try different codec options (in order of preference)
+    # codecs_to_try = [
+    #     ('avc1', "H.264 codec (avc1)"),
+    #     ('H264', "H.264 codec (H264)"),
+    #     ('X264', "H.264 codec (X264)"),
+    #     ('XVID', "XVID codec (fallback)"),  
+    #     ('MJPG', "MJPG codec (highly compatible fallback)")
+    # ]
+
     codecs_to_try = [
-        ('avc1', "H.264 codec (avc1)"),
-        ('H264', "H.264 codec (H264)"),
-        ('X264', "H.264 codec (X264)"),
-        ('XVID', "XVID codec (fallback)"),  
-        ('MJPG', "MJPG codec (highly compatible fallback)")
+        ('avc1', "H.264 (libx264 software)"),  # best balance of quality and size
+        ('mp4v', "MPEG-4 fallback")            # backup in case avc1 fails
     ]
+
     
     out = None
     for codec, codec_name in codecs_to_try:

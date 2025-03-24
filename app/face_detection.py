@@ -6,7 +6,7 @@ import pickle
 from deepface import DeepFace
 import time
 
-from app.embed import find_match_with_embeddings
+from embed import find_match_with_embeddings
 from utils.photo_utils import current_timestamp, mark_frame_with_face
 from utils.directories import SAVE_DIR, DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
 from utils.constants import MATCH_THRESHOLD

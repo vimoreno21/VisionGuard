@@ -66,7 +66,7 @@ codec_name = ""
 for codec, codec_desc in codecs_to_try:
     try:
         print(f"[INFO] Trying {codec_desc} codec...")
-        fourcc = cv2.VideoWriter_fourcc(*codec)
+        fourcc = cv2.VideoWriter_fourcc(*codec) 
         
         # Use a more conservative frame rate
         target_fps = min(15.0, original_fps)  # Cap at 15fps for stability

@@ -2,7 +2,7 @@ import os
 import cv2
 import time
 from dotenv import load_dotenv
-
+from utils.directories import DEBUG_DIR
 from utils.photo_utils import current_timestamp
 
 # get env variables
@@ -12,7 +12,7 @@ RTSP_URL_BASE = os.getenv("RTSP_URL_BASE")
 CAM_NUM = os.getenv("FRONT_DOOR_CAM")
 CAM2_NUM = os.getenv("STAIRS_CAM")
 RTSP_URL = f"{RTSP_URL_BASE}{CAM2_NUM}"
-from utils.directories import DEBUG_DIR
+
 
 def setup_camera():
     """Set up the camera with retry logic"""
@@ -25,7 +25,8 @@ def setup_camera():
             print(f"Attempting to connect to camera: {RTSP_URL}")
             
             # Open the RTSP stream with FFMPEG for better performance
-            cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+            # cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+            cap = cv2.VideoCapture("new_video.mp4")
 
             # Reduce OpenCV buffer to avoid stale frames
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Keep only 1 frame in buffe

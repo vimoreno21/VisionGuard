@@ -25,16 +25,21 @@ video_save_path = os.path.join(SAVE_DIR, "videos")
 os.makedirs(video_save_path, exist_ok=True)
 
 # Load YOLOv8 model for person detection
-yolo_model = YOLO("yolov8n.pt")  # Lightweight model for real-time tracking
+# yolo_model = YOLO("yolov8n.pt")  # Lightweight model for real-time tracking
+yolo_model = YOLO("yolov8s.pt") # Better performance but slower
+
 
 # Initialize DeepSORT tracker
-tracker = DeepSort(max_age=50)  # Adjust max_age to control tracking persistence
+tracker = DeepSort(max_age=50, n_init=1)  # Adjust max_age to control tracking persistence
 
 # Use your function to set up the camera
 cap = setup_camera()
 if cap is None:
     print("⛔ Camera setup failed. Exiting...")
     exit()
+
+#  Check if its a video or live feed 
+is_video_file = isinstance(cap, cv2.VideoCapture) and cap.get(cv2.CAP_PROP_FRAME_COUNT) > 0
 
 # Save output video
 save_output = True
@@ -43,7 +48,7 @@ output_video_path = os.path.join(video_save_path, f"tracked_rtsp_output_{current
 if save_output:
     # Use mp4v codec as it was working better for you
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    fps = 15
+    fps = 5
     frame_width, frame_height = int(cap.get(3)), int(cap.get(4))
     
     # Ensure dimensions are even
@@ -67,59 +72,118 @@ frame_count = 0
 max_runtime = 60  # Adjust as needed (e.g., 60 = 1 minute of recording)
 start_time = time.time()
 
-try:
-    print("[INFO] Beginning video processing. Will run for up to", max_runtime, "seconds.")
-    print("[INFO] Press Ctrl+C once (not repeatedly) for clean shutdown.")
+# try:
+#     print("[INFO] Beginning video processing. Will run for up to", max_runtime, "seconds.")
+#     print("[INFO] Press Ctrl+C once (not repeatedly) for clean shutdown.")
     
-    while cap.isOpened() and not stop_program:
-        # Check if we've reached the maximum runtime
-        if time.time() - start_time > max_runtime:
-            print(f"[INFO] Maximum runtime of {max_runtime} seconds reached")
-            break
+#     while cap.isOpened() and not stop_program:
+#         # Check if we've reached the maximum runtime
+#         if not is_video_file and time.time() - start_time > max_runtime:
+#             print(f"[INFO] Maximum runtime of {max_runtime} seconds reached")
+#             break
+
             
+#         ret, frame = cap.read()
+#         if not ret:
+#             print("[INFO] End of video stream reached")
+#             break
+            
+#         frame_count += 1
+        
+#         if frame_count % 3 == 0:
+#             detections = yolo_model(frame, classes=[0])[0] # Only detect people
+#             detections_list = []
+#             for det in detections.boxes.data.tolist():
+#                 x1, y1, x2, y2, conf, class_id = det
+#                 if conf > 0.3:  # Confidence filter
+#                     detections_list.append([[x1, y1, x2, y2], conf, None])
+#             tracked_objects = tracker.update_tracks(detections_list, frame=frame)
+            
+#         else:
+#             tracked_objects = tracker.update_tracks([], frame=frame)
+
+        
+#         for track in tracked_objects:
+#             print(f"Track {track.track_id} | Confirmed: {track.is_confirmed()} | Age: {track.age}")
+#             if not track.is_confirmed():
+#                 continue
+                
+#             track_id = track.track_id
+#             x1, y1, x2, y2 = map(int, track.to_tlbr())
+#             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#             cv2.putText(frame, f"ID: {track_id}", (x1, y1 - 10), 
+#                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        
+#         if save_output:
+#             out.write(frame)
+            
+#             # Print status occasionally
+#             if frame_count % 30 == 0:
+#                 elapsed = time.time() - start_time
+#                 fps_rate = frame_count / elapsed
+#                 remaining = max_runtime - elapsed
+#                 print(f"[INFO] Processed {frame_count} frames, {fps_rate:.1f} FPS, {remaining:.1f} seconds remaining")
+        
+
+last_detection_frame = 0
+detection_interval = 5
+tracked_objects = []
+
+try:
+    print("[INFO] Beginning YOLO + DeepSORT tracking.")
+    while cap.isOpened() and not stop_program:
+        if not is_video_file and time.time() - start_time > max_runtime:
+            print(f"[INFO] Max runtime of {max_runtime}s reached")
+            break
+
         ret, frame = cap.read()
         if not ret:
             print("[INFO] End of video stream reached")
             break
-            
+
         frame_count += 1
-        
-        # Process detections
-        detections = yolo_model(frame)[0]
+
+        confirmed_tracks = [t for t in tracked_objects if t.is_confirmed()]
+        should_detect = (
+            frame_count - last_detection_frame >= detection_interval or
+            len(confirmed_tracks) == 0
+        )
+
         detections_list = []
-        
-        for det in detections.boxes.data.tolist():
-            x1, y1, x2, y2, conf, class_id = det
-            if int(class_id) == 0:  # Person class
-                detections_list.append([[x1, y1, x2, y2], conf, None])
-                
+
+        if should_detect:
+            detections = yolo_model(frame, classes=[0])[0]
+            for det in detections.boxes.data.tolist():
+                x1, y1, x2, y2, conf, class_id = det
+                if conf > 0.4:
+                    detections_list.append([[x1, y1, x2, y2], conf, None])
+            last_detection_frame = frame_count
+
         tracked_objects = tracker.update_tracks(detections_list, frame=frame)
-        
+
         for track in tracked_objects:
+            print(f"Track {track.track_id} | Confirmed: {track.is_confirmed()} | Age: {track.age}")
             if not track.is_confirmed():
                 continue
-                
-            track_id = track.track_id
+
             x1, y1, x2, y2 = map(int, track.to_tlbr())
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, f"ID: {track_id}", (x1, y1 - 10), 
+            cv2.putText(frame, f"ID: {track.track_id}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        
+
         if save_output:
             out.write(frame)
-            
-            # Print status occasionally
+
             if frame_count % 30 == 0:
                 elapsed = time.time() - start_time
                 fps_rate = frame_count / elapsed
                 remaining = max_runtime - elapsed
-                print(f"[INFO] Processed {frame_count} frames, {fps_rate:.1f} FPS, {remaining:.1f} seconds remaining")
-        
-        # Short sleep to reduce CPU usage (adjust as needed)
-        time.sleep(0.001)
-            
+                print(f"[INFO] {frame_count} frames | {fps_rate:.1f} FPS | {remaining:.1f}s remaining")
+
+
 except Exception as e:
-    print(f"\n[ERROR] An error occurred: {e}")
+    print(f"\n[ERROR] {e}")
+
     
 finally:
     print("\n[INFO] Releasing video resources...")
