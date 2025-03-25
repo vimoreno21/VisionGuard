@@ -59,6 +59,21 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
 
     for track in tracked_objects:
         if not track.is_confirmed():
+            # Draw unconfirmed tracks in red (if they exist)
+            try:
+                x1, y1, x2, y2 = map(int, track.to_tlbr())
+                # Validate the bounding box coordinates are within frame dimensions
+                h, w = frame.shape[:2]
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(w-1, x2), min(h-1, y2)
+                
+                # Only draw if the box has valid dimensions
+                if x2 > x1 and y2 > y1:
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                    cv2.putText(frame, f"ID: {track.track_id} (unconf)", (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            except Exception as e:
+                print(f"Error drawing unconfirmed track {track.track_id}: {e}")
             continue
         try:
             x1, y1, x2, y2 = map(int, track.to_tlbr())

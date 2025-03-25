@@ -13,6 +13,7 @@ import numpy as np
 import time
 import signal
 from ultralytics import YOLO
+
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from utils.directories import SAVE_DIR
 from camera import setup_camera
