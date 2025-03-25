@@ -1,10 +1,19 @@
+import os
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow backend logs
+
+# import tensorflow as tf
+# tf.get_logger().setLevel('ERROR')  # Suppress keras progress bar like 1/1 [..]
+
+# import warnings
+# warnings.filterwarnings("ignore", category=UserWarning)
+
 import cv2
 import torch
-import os
 import numpy as np
 import time
 import signal
 from ultralytics import YOLO
+
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from utils.directories import SAVE_DIR
 from camera import setup_camera
@@ -30,7 +39,7 @@ yolo_model = YOLO("yolov8s.pt") # Better performance but slower
 
 
 # Initialize DeepSORT tracker
-tracker = DeepSort(max_age=50, n_init=1)  # Adjust max_age to control tracking persistence
+tracker = DeepSort(max_age=50, n_init=2)  # Adjust max_age to control tracking persistence
 
 # Use your function to set up the camera
 cap = setup_camera()
@@ -126,7 +135,7 @@ start_time = time.time()
         
 
 last_detection_frame = 0
-detection_interval = 5
+detection_interval = 2
 tracked_objects = []
 
 try:
@@ -145,8 +154,8 @@ try:
 
         confirmed_tracks = [t for t in tracked_objects if t.is_confirmed()]
         should_detect = (
-            frame_count - last_detection_frame >= detection_interval or
-            len(confirmed_tracks) == 0
+            frame_count - last_detection_frame >= detection_interval # or
+            #len(confirmed_tracks) == 0
         )
 
         detections_list = []

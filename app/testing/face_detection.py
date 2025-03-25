@@ -63,7 +63,8 @@ for db_name in ["victoria", "other", "group"]:
             img_path=SAVE_PATH,
             db_path=db_path,
             model_name="VGG-Face",
-            distance_metric="cosine"
+            distance_metric="cosine",
+            verbose=0
         )
 
         if results and not results[0].empty:

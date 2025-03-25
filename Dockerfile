@@ -4,8 +4,6 @@ FROM ubuntu:20.04
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/usr/local/cuda/bin:${PATH}"
-# ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
-# ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:${LD_LIBRARY_PATH}"
 ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:/usr/local/cuda/lib64"
 
 
@@ -23,28 +21,12 @@ RUN apt-get update && apt-get install -y \
     libsm6 libxext6 libxrender-dev \
     libhdf5-dev libhdf5-serial-dev \
     hdf5-tools ffmpeg curl wget unzip git \
-    # Added packages for H264 hardware encoding on Jetson
-    libgstreamer1.0-dev \
-    gstreamer1.0-plugins-base \
-    gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad \
-    gstreamer1.0-plugins-ugly \
-    gstreamer1.0-tools \
-    gstreamer1.0-libav \
-    python3-gst-1.0 \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libv4l-dev \
-    libxvidcore-dev \
-    libx264-dev \
-    v4l-utils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir python-dotenv==1.0.1
 
-# Add missing symlink for ffmpeg libffi issue
-RUN ln -s /usr/lib/aarch64-linux-gnu/libffi.so.7 /usr/lib/aarch64-linux-gnu/libffi.so.8
+# # Add missing symlink for ffmpeg libffi issue
+# RUN ln -s /usr/lib/aarch64-linux-gnu/libffi.so.7 /usr/lib/aarch64-linux-gnu/libffi.so.8
 
 # Make sure HDF5 is linked correctly
 RUN ln -s /usr/lib/aarch64-linux-gnu/hdf5/serial/libhdf5.so /usr/lib/libhdf5.so
@@ -84,9 +66,6 @@ RUN pip3 install --no-cache-dir deep_sort_realtime
 
 # Set working directory (matching your mount point)
 WORKDIR /VisionGuard
-
-# Copy application files into the container
-COPY . /VisionGuard
 
 # Default command
 CMD ["python3"]

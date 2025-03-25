@@ -53,7 +53,8 @@ def find_match_in_db(face_img):
                 db_path=db_path,
                 model_name="VGG-Face",
                 distance_metric="cosine",
-                enforce_detection=False
+                enforce_detection=False,
+                verbose=0
             )
             if results and not results[0].empty:
                 df = results[0]
