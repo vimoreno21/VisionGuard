@@ -1,0 +1,17 @@
+cython==0.29.37
+numpy==1.23.5
+h5py==3.8.0
+keras==2.10.0
+deepface==0.0.93
+opencv-python-headless==4.5.5.64
+flask==3.0.3
+matplotlib==3.5.3
+pandas==2.0.3
+gdown==5.2.0
+tqdm==4.67.1
+flask-cors==5.0.0
+mtcnn==0.1.1
+retina-face==0.0.17
+fire==0.7.0
+gunicorn==23.0.0
+dotenv
