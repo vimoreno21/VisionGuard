@@ -73,7 +73,7 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
                     cv2.putText(frame, f"ID: {track.track_id} (unconf)", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
             except Exception as e:
-                print(f"Error drawing unconfirmed track {track.track_id}: {e}")
+                logger.exception(f"Error drawing unconfirmed track {track.track_id}: {e}")
             continue
         try:
             x1, y1, x2, y2 = map(int, track.to_tlbr())

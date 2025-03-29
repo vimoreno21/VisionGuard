@@ -14,7 +14,6 @@ from utils.logger import logger
 
 def process_face(face_img, face_location, cropped_frame, original_frame, timestamp, img_frame, model_name, result_dict=None):
     """Process a detected face for recognition (run in separate thread)"""
-    
 
     try:
         # Create output directories if they don't exist
