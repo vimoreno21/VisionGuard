@@ -1,6 +1,8 @@
 import cv2
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
+from utils.logger import logger
+
 
 # Initialize YOLO and DeepSORT
 yolo_model = YOLO("yolov8s.pt")
@@ -19,7 +21,7 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
 
     # Validate input frame
     if frame is None or frame.size == 0:
-        print("Warning: Empty frame received in run_tracking")
+        logger.warning("Empty frame received in run_tracking")
         return previous_tracks or [], last_detection_frame, frame
     
     detections_list = []
@@ -45,12 +47,12 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
                     detections_list.append([[x1, y1, x2, y2], conf, None])
             last_detection_frame = frame_count
         except Exception as e:
-            print(f"Error during detection: {e}")
+            logger.exception(f"Error during detection: {e}")
     
     try:
         tracked_objects = tracker.update_tracks(detections_list, frame=frame)
     except Exception as e:
-        print(f"Error during tracking: {e}")
+        logger.exception(f"Error during tracking: {e}")
         tracked_objects = previous_tracks or []
 
     # Count confirmed vs unconfirmed tracks
@@ -74,7 +76,7 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
                     cv2.putText(frame, f"ID: {track.track_id} (unconf)", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
             except Exception as e:
-                print(f"Error drawing unconfirmed track {track.track_id}: {e}")
+                logger.exception(f"Error drawing unconfirmed track {track.track_id}: {e}")
             continue
 
         confirmed += 1
@@ -91,8 +93,6 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
                 cv2.putText(frame, f"ID: {track.track_id}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         except Exception as e:
-            print(f"Error drawing confirmed track {track.track_id}: {e}")
-    
-    print(f"Confirmed: {confirmed}, Unconfirmed: {unconfirmed}")
+            logger.exception(f"Error drawing confirmed track {track.track_id}: {e}")
 
     return tracked_objects, last_detection_frame, frame

@@ -10,10 +10,11 @@ from embed import find_match_with_embeddings
 from utils.photo_utils import current_timestamp, mark_frame_with_face
 from utils.directories import SAVE_DIR, DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
 from utils.constants import MATCH_THRESHOLD
+from utils.logger import logger
+
 
 def process_face(face_img, face_location, original_frame, timestamp, model_name, result_dict=None):
     """Process a detected face for recognition (run in separate thread)"""
-    
 
     try:
         # Create output directories if they don't exist
@@ -39,9 +40,9 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
                 # Extract person name from identity
                 person_name = os.path.basename(os.path.dirname(identity))
                 
-                print(f"✅ Match found via {match_type}!")
-                print(f"🔹 Matched with: {person_name} (Confidence: {confidence:.2f})")
-                print(f"🔹 Full identity: {identity}")
+                logger.info(f"✅ Match found via {match_type}!")
+                logger.info(f"🔹 Matched with: {person_name} (Confidence: {confidence:.2f})")
+                logger.info(f"🔹 Full identity: {identity}")
                 
                 # Mark frame with identity and save it
                 marked_frame = mark_frame_with_face(original_frame, face_location, f"{person_name} ({match_type})", confidence)
@@ -52,10 +53,10 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
                     result_dict['identity'] = identity
                 return person_name
             else:
-                print(f"❌ No strong match found (Low confidence: {confidence:.2f})")
+                logger.info(f"❌ No strong match found (Low confidence: {confidence:.2f})")
                 reason = "Low confidence (Distance too high)"
         else:
-            print("❌ No match found in database")
+            logger.info("❌ No match found in database")
             reason = "No identity found"
 
         # Save unknown face with reason
@@ -69,7 +70,7 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
         return None
 
     except Exception as e:
-        print(f"Error processing face: {e}")
+        logger.exception(f"Error processing face: {e}")
 
 def process_frame_for_faces(frame, detector, model_name, create_thread=False):
     """Process a single frame to detect and recognize faces"""
@@ -96,7 +97,7 @@ def process_frame_for_faces(frame, detector, model_name, create_thread=False):
         # Save the cropped face
         face_path = os.path.join(detected_faces_dir, f"face_{timestamp}.jpg")
         cv2.imwrite(face_path, face_img)
-        print(f"✅ Face detected and saved to {face_path}")
+        logger.info(f"✅ Face detected and saved to {face_path}")
         
         if create_thread:
             # Process face in a separate thread
@@ -109,7 +110,7 @@ def process_frame_for_faces(frame, detector, model_name, create_thread=False):
             identity = process_face(face_img, face_location, frame, timestamp, model_name)
             return True, None, identity
     else:
-        print("No face detected in this frame")
+        logger.debug("No face detected in this frame")
         return False, None, None
 
 def detect_and_crop_face(frame, detector):
@@ -119,7 +120,7 @@ def detect_and_crop_face(frame, detector):
     """
     # Validate input frame
     if frame is None or frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
-        print("Warning: Empty frame received in detect_and_crop_face")
+        logger.warning("Warning: Empty frame received in detect_and_crop_face")
         return None, None
     
     try:
@@ -128,7 +129,7 @@ def detect_and_crop_face(frame, detector):
         
         # Detect faces
         results = detector.detect_faces(rgb_frame)
-        print(f"Face detection results: {len(results)} faces found")
+        logger.debug(f"Face detection results: {len(results)} faces found")
         
         if not results:
             return None, None
@@ -149,7 +150,7 @@ def detect_and_crop_face(frame, detector):
         
         # Validate final dimensions
         if w_new <= 0 or h_new <= 0:
-            print("Warning: Invalid face dimensions after applying margin")
+            logger.warning("Invalid face dimensions after applying margin")
             return None, None
             
         # Crop face and make a copy to avoid reference issues
@@ -157,7 +158,7 @@ def detect_and_crop_face(frame, detector):
         
         # Final validation of cropped face
         if cropped_face is None or cropped_face.size == 0:
-            print("Warning: Empty face image after cropping")
+            logger.warning("Empty face image after cropping")
             return None, None
             
         face_location = (x_new, y_new, w_new, h_new)
@@ -165,7 +166,5 @@ def detect_and_crop_face(frame, detector):
         return cropped_face, face_location
         
     except Exception as e:
-        print(f"Error during face detection: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Error during face detection: {e}")
         return None, None

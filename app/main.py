@@ -10,52 +10,34 @@ from mtcnn import MTCNN
 from camera import setup_camera
 from face_detection import process_frame_for_faces
 from tracking import run_tracking
+from utils.logger import logger
 from utils.directories import SAVE_DIR, DEBUG_DIR, DB_PATHS, LOG_FILES_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
 from utils.constants import FRAME_SAVE_INTERVAL, HEADLESS
 
 # Import the precompute_embeddings function from wherever you've defined it
 from embed import precompute_embeddings
+    
 
-def setup_logging():
-    """Set up logging to file and return objects needed for cleanup"""
-    # Create log directory if it doesn't exist
-    os.makedirs(LOG_FILES_DIR, exist_ok=True)
-    
-    # Create timestamped log file
-    log_file = os.path.join(LOG_FILES_DIR, f"face_detection_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-    
-    # Open log file
-    log_fileobj = open(log_file, 'w')
-    
-    # Save original stdout and stderr
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    
-    # Redirect stdout and stderr to log file
-    sys.stdout = log_fileobj
-    sys.stderr = log_fileobj
-    
-    return log_file, log_fileobj, original_stdout, original_stderr
-def main():
-    print("=" * 60)
-    print("STARTING CONTINUOUS TRACKING + FACE RECOGNITION")
-    print("=" * 60)
-    print(f"Output dir: {OUTPUT_DIR}")
-    print(f"Debug dir: {DEBUG_DIR}")
-    print(f"DBs: {', '.join(DB_PATHS)}")
-    print(f"Embeddings path: {EMBEDDINGS_DIR}")
-    print("=" * 60)
+def main():    
+    logger.info("=" * 60)
+    logger.info("STARTING CONTINUOUS TRACKING + FACE RECOGNITION")
+    logger.info("=" * 60)
+    logger.info(f"Output dir: {OUTPUT_DIR}")
+    logger.info(f"Debug dir: {DEBUG_DIR}")
+    logger.info(f"DBs: {', '.join(DB_PATHS)}")
+    logger.info(f"Embeddings path: {EMBEDDINGS_DIR}")
+    logger.info("=" * 60)
 
     # Precompute face embeddings for faster recognition
-    print("Precomputing face embeddings...")
+    logger.info("Precomputing face embeddings...")
     # You can try different models: "VGG-Face", "Facenet", "Facenet512", "ArcFace"
     model_name = "Facenet512"
     precompute_embeddings(model_name)
-    print("Embeddings computation completed")
+    logger.info("Embeddings computation completed")
 
     cap = setup_camera()
     if cap is None:
-        print("Exiting due to camera failure.")
+        logger.error("Exiting due to camera failure.")
         return
 
 
@@ -81,7 +63,7 @@ def main():
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
-                print("Camera stream ended.")
+                logger.warning("Camera stream ended.")
                 break
 
             frame_count += 1
@@ -99,7 +81,7 @@ def main():
 
                 track_id = track.track_id
 
-                print(f"Processing track ID {track_id}")
+                logger.debug(f"Processing track ID {track_id}")
 
                 seen_ids.add(track_id)
                 x1, y1, x2, y2 = map(int, track.to_tlbr())
@@ -110,7 +92,7 @@ def main():
                 
 
                 if person_name in identified_identities:
-                    print(f"🔁 Skipping ID {track_id} — person {person_name} already identified")
+                    logger.info(f"🔁 Skipping ID {track_id} — person {person_name} already identified")
                     continue
 
                 if person_name:
@@ -121,33 +103,32 @@ def main():
 
                 if success:
                     frames_processed += 1
-                    print(f"✅ Frame {frames_processed} captured and ID {track_id} identified successfully")
+                    logger.info(f"✅ Frame {frames_processed} captured and ID {track_id} identified successfully")
                 else:
-                    print(f"❌ Face match failed for ID {track_id}, will retry if seen again")
+                    logger.info(f"❌ Face match failed for ID {track_id}, will retry if seen again")
                 
                     
-                print(f"Completed capturing {frames_processed} frames")
+                logger.debug(f"Completed capturing {frames_processed} frames")
                 
                 # Wait for all processing threads to complete
-                print(f"Waiting for {len(processing_threads)} processing threads to complete...")
-                for thread in processing_threads:
-                    thread.join(timeout=50)  # Wait up to 50 seconds per thread
+                if len(processing_threads) > 1:
+                    logger.debug(f"Waiting for {len(processing_threads)} processing threads to complete...")
+                    for thread in processing_threads:
+                        thread.join(timeout=50)  # Wait up to 50 seconds per thread
                     
-                print("All processing completed")
+                logger.info("All processing completed")
 
 
     except KeyboardInterrupt:
-        print("\n[INFO] Interrupted by user.")
+        logger.info("\n[INFO] Interrupted by user.")
     except Exception as e:
-        print(f"Error in main loop: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Error in main loop: {e}")
     finally:
         if 'cap' in locals() and cap is not None:
             cap.release()
         if not HEADLESS:
             cv2.destroyAllWindows()
-        print("[INFO] System shutdown complete.")
+        logger.info("[INFO] System shutdown complete.")
 
 if __name__ == "__main__":
     main()
