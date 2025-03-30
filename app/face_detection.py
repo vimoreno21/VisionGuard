@@ -13,7 +13,7 @@ from utils.constants import MATCH_THRESHOLD
 from utils.logger import logger
 
 
-def process_face(face_img, face_location, original_frame, timestamp, model_name, result_dict=None):
+def process_face(face_img, face_location, original_frame, timestamp, img_frame, model_name, result_dict=None):
     """Process a detected face for recognition (run in separate thread)"""
 
     try:
@@ -23,12 +23,8 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
         os.makedirs(detected_faces_dir, exist_ok=True)
         os.makedirs(matches_dir, exist_ok=True)
         
-        # Save the face temporarily
-        temp_path = os.path.join(detected_faces_dir, f"face_{timestamp}.jpg")
-        cv2.imwrite(temp_path, face_img)
-        
         # Find match using precomputed embeddings
-        identity, distance, match_type = find_match_with_embeddings(temp_path, model_name)
+        identity, distance, match_type = find_match_with_embeddings(face_img, model_name)
 
         # Create reson variable 
         reason = "Unassigned reason var"
@@ -40,14 +36,9 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
                 # Extract person name from identity
                 person_name = os.path.basename(os.path.dirname(identity))
                 
-                logger.info(f"✅ Match found via {match_type}!")
-                logger.info(f"🔹 Matched with: {person_name} (Confidence: {confidence:.2f})")
-                logger.info(f"🔹 Full identity: {identity}")
-                
-                # Mark frame with identity and save it
-                marked_frame = mark_frame_with_face(original_frame, face_location, f"{person_name} ({match_type})", confidence)
-                marked_frame_path = os.path.join(matches_dir, f"match_{person_name}_{timestamp}.jpg")
-                cv2.imwrite(marked_frame_path, marked_frame)
+                logger.info(f"✅ Frame {img_frame}: match found via {match_type}!"
+                            f"🔹 Matched with: {person_name} (Confidence: {confidence:.2f})"
+                            f"🔹 Full identity: {identity}")
 
                 if result_dict is not None:
                     result_dict['identity'] = identity
@@ -59,11 +50,6 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
             logger.info("❌ No match found in database")
             reason = "No identity found"
 
-        # Save unknown face with reason
-        marked_frame = mark_frame_with_face(original_frame, face_location, f"Unknown ({reason})")
-        marked_frame_path = os.path.join(matches_dir, f"unknown_{timestamp}.jpg")
-        cv2.imwrite(marked_frame_path, marked_frame)
-
         if result_dict is not None:
             result_dict['identity'] = None
         
@@ -72,7 +58,7 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
     except Exception as e:
         logger.exception(f"Error processing face: {e}")
 
-def process_frame_for_faces(frame, detector, model_name, create_thread=False):
+def process_frame_for_faces(frame, detector, model_name, img_frame, create_thread=False):
     """Process a single frame to detect and recognize faces"""
     # Save this frame (with timestamp) for debugging
     timestamp = current_timestamp()
@@ -80,10 +66,7 @@ def process_frame_for_faces(frame, detector, model_name, create_thread=False):
     # Create raw images directory if it doesn't exist
     raw_images_dir = os.path.join(DEBUG_DIR, "raw_images")
     os.makedirs(raw_images_dir, exist_ok=True)
-    
-    # # Save raw frame
-    # raw_path = os.path.join(raw_images_dir, f"raw_frame_{timestamp}.jpg")
-    # cv2.imwrite(raw_path, frame)
+
     
     # Detect and crop face
     face_img, face_location = detect_and_crop_face(frame, detector)
@@ -94,16 +77,12 @@ def process_frame_for_faces(frame, detector, model_name, create_thread=False):
         detected_faces_dir = os.path.join(OUTPUT_DIR, "detected_faces")
         os.makedirs(detected_faces_dir, exist_ok=True)
         
-        # Save the cropped face
-        face_path = os.path.join(detected_faces_dir, f"face_{timestamp}.jpg")
-        cv2.imwrite(face_path, face_img)
-        logger.info(f"✅ Face detected and saved to {face_path}")
-        
         if create_thread:
+            result_dict = {}  # shared dict to hold the result
             # Process face in a separate thread
-            thread = threading.Thread(target=process_face, args=(face_img, face_location, frame, timestamp, model_name))
+            thread = threading.Thread(target=process_face, args=(face_img, face_location, frame, timestamp, img_frame, model_name, result_dict))
             thread.start()  # Note: not setting daemon=True
-            return True, thread, None
+            return True, thread, result_dict
         
         else:
             # Process face directly

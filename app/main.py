@@ -48,13 +48,11 @@ def main():
     identified_identities = set()
 
     last_detection_frame = 0
-    detection_interval = 5
+    detection_interval = 6
     frame_count = 0
 
     # Keep track of threads we create
     processing_threads = []
-
-    frames_processed = 0
 
     # At the beginning of your main function, initialize tracked_objects
     tracked_objects = []
@@ -67,7 +65,9 @@ def main():
                 break
 
             frame_count += 1
-
+            
+            if frame_count % 3 != 0:
+                continue  # skip recognition this frame
 
             # Get tracking results
             tracked_objects, last_detection_frame, frame = run_tracking(
@@ -76,47 +76,44 @@ def main():
 
             # Run DeepFace for new IDs
             for track in tracked_objects:
-                # if not track.is_confirmed():
-                #     continue
 
                 track_id = track.track_id
 
-                logger.debug(f"Processing track ID {track_id}")
+                # Skip if the track is not confirmed
+                if not track.is_confirmed():
+                    logger.debug(f"Track ID {track_id} is not confirmed, skipping...")
+                    continue
+    
+                if track_id in seen_ids:
+                    continue  # already identified, skip everything
 
-                seen_ids.add(track_id)
+                logger.info(f"Processing track ID {track_id}")
+
                 x1, y1, x2, y2 = map(int, track.to_tlbr())
                 cropped = frame[y1:y2, x1:x2]
 
                 # Process the frame and get the thread if one was created
-                success, thread, person_name = process_frame_for_faces(cropped, detector, model_name, create_thread=False)
-                
-
-                if person_name in identified_identities:
-                    logger.info(f"🔁 Skipping ID {track_id} — person {person_name} already identified")
-                    continue
+                success, thread, person_name = process_frame_for_faces(cropped, detector, model_name, frame_count, create_thread=True)
 
                 if person_name:
                     identified_identities.add(person_name)
+                    seen_ids.add(track_id)
+                    logger.info(f"✅ Frame {frame_count} captured and ID {track_id} identified successfully with identity {person_name}")
+                else:
+                    logger.info(f"❌ Frame {frame_count} captured but ID {track_id} could not be identified")
 
                 if thread:
-                    processing_threads.append(thread)
+                    processing_threads.append((thread, result_dict, track_id))
 
-                if success:
-                    frames_processed += 1
-                    logger.info(f"✅ Frame {frames_processed} captured and ID {track_id} identified successfully")
-                else:
-                    logger.info(f"❌ Face match failed for ID {track_id}, will retry if seen again")
                 
-                    
-                logger.debug(f"Completed capturing {frames_processed} frames")
                 
-                # Wait for all processing threads to complete
-                if len(processing_threads) > 1:
-                    logger.debug(f"Waiting for {len(processing_threads)} processing threads to complete...")
-                    for thread in processing_threads:
-                        thread.join(timeout=50)  # Wait up to 50 seconds per thread
-                    
-                logger.info("All processing completed")
+            # Wait for all processing threads to complete
+            if len(processing_threads) > 1:
+                logger.debug(f"Waiting for {len(processing_threads)} processing threads to complete...")
+                for thread in processing_threads:
+                    thread.join(timeout=50)  # Wait up to 50 seconds per thread
+                
+            logger.debug("All processing completed")
 
 
     except KeyboardInterrupt:

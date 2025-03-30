@@ -57,17 +57,17 @@ def save_embeddings(reference_embeddings, average_embeddings, model_name):
     
     print(f"Saved embeddings to {embeddings_path} and {avg_embeddings_path}")
 
-def compute_embedding_for_image(image_path, model_name):
+def compute_embedding_for_image(image, model_name):
     """Compute facial embedding for a single image"""
     try:
         embedding = DeepFace.represent(
-            img_path=image_path, 
+            img_path=image, 
             model_name=model_name,
             enforce_detection=False
         )
         return embedding[0]["embedding"] # embedding is a list of a dictionary 
     except Exception as e:
-        print(f"Error computing embedding for {image_path}: {e}")
+        print(f"Error computing embedding: {e}")
         return None
     
 def compute_average_embeddings(person_embeddings):
@@ -157,7 +157,7 @@ def precompute_embeddings(model_name):
     
     return reference_embeddings, average_embeddings
 
-def find_match_with_embeddings(face_img_path, model_name):
+def find_match_with_embeddings(face_img, model_name):
     """
     Find matching face using precomputed embeddings
     Returns: (identity, distance, match_type) of the best match, or (None, 1.0, None) if no match
@@ -171,7 +171,7 @@ def find_match_with_embeddings(face_img_path, model_name):
     
     try:
         # Get embedding for current face
-        face_embedding = compute_embedding_for_image(face_img_path, model_name)
+        face_embedding = compute_embedding_for_image(face_img, model_name)
         if face_embedding is None:
             return None, 1.0, None
         
