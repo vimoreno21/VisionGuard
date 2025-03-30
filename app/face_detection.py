@@ -27,7 +27,7 @@ def process_face(face_img, face_location, original_frame, timestamp, img_frame, 
         identity, distance, match_type = find_match_with_embeddings(face_img, model_name)
 
         # Create reson variable 
-        reason = "Unassigned reason var"
+        # reason = "Unassigned reason var"
         
         # Determine match confidence
         if identity:
@@ -37,18 +37,18 @@ def process_face(face_img, face_location, original_frame, timestamp, img_frame, 
                 person_name = os.path.basename(os.path.dirname(identity))
                 
                 logger.info(f"✅ Frame {img_frame}: match found via {match_type}!"
-                            f"🔹 Matched with: {person_name} (Confidence: {confidence:.2f})"
-                            f"🔹 Full identity: {identity}")
+                            f"Matched with: {person_name} (Confidence: {confidence:.2f})"
+                            f"Full identity: {identity}")
 
                 if result_dict is not None:
                     result_dict['identity'] = identity
                 return person_name
             else:
-                logger.info(f"❌ No strong match found (Low confidence: {confidence:.2f})")
-                reason = "Low confidence (Distance too high)"
+                logger.info(f"No strong match found (Low confidence: {confidence:.2f})")
+                # reason = "Low confidence (Distance too high)"
         else:
-            logger.info("❌ No match found in database")
-            reason = "No identity found"
+            logger.info("No match found in database")
+            # reason = "No identity found"
 
         if result_dict is not None:
             result_dict['identity'] = None

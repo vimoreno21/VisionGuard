@@ -58,6 +58,8 @@ def main():
     tracked_objects = []
     
     try:
+        start_time = time.time()
+
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
@@ -74,6 +76,8 @@ def main():
                 frame, frame_count, last_detection_frame, detection_interval, tracked_objects
             )
 
+            logger.debug(f"Frame {frame_count}: {len(tracked_objects)} tracked objects")
+
             # Run DeepFace for new IDs
             for track in tracked_objects:
 
@@ -81,7 +85,6 @@ def main():
 
                 # Skip if the track is not confirmed
                 if not track.is_confirmed():
-                    logger.debug(f"Track ID {track_id} is not confirmed, skipping...")
                     continue
     
                 if track_id in seen_ids:
@@ -93,27 +96,25 @@ def main():
                 cropped = frame[y1:y2, x1:x2]
 
                 # Process the frame and get the thread if one was created
-                success, thread, person_name = process_frame_for_faces(cropped, detector, model_name, frame_count, create_thread=True)
-
-                if person_name:
-                    identified_identities.add(person_name)
-                    seen_ids.add(track_id)
-                    logger.info(f"✅ Frame {frame_count} captured and ID {track_id} identified successfully with identity {person_name}")
-                else:
-                    logger.info(f"❌ Frame {frame_count} captured but ID {track_id} could not be identified")
+                success, thread, result_dict = process_frame_for_faces(cropped, detector, model_name, frame_count, create_thread=True)
 
                 if thread:
                     processing_threads.append((thread, result_dict, track_id))
 
+            for thread, result_dict, track_id in processing_threads:
+                thread.join(timeout=5)
+                person_name = result_dict.get('identity')
+
+                if person_name:
+                    if person_name not in identified_identities:
+                        identified_identities.add(person_name)
+                    seen_ids.add(track_id)
+                    logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
+                else:
+                    logger.info(f"Frame {frame_count} captured but ID {track_id} could not be identified")
+
+            processing_threads.clear()   
                 
-                
-            # Wait for all processing threads to complete
-            if len(processing_threads) > 1:
-                logger.debug(f"Waiting for {len(processing_threads)} processing threads to complete...")
-                for thread in processing_threads:
-                    thread.join(timeout=50)  # Wait up to 50 seconds per thread
-                
-            logger.debug("All processing completed")
 
 
     except KeyboardInterrupt:
@@ -126,6 +127,17 @@ def main():
         if not HEADLESS:
             cv2.destroyAllWindows()
         logger.info("[INFO] System shutdown complete.")
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logger.info(f"Total runtime: {elapsed_time:.2f} seconds")
+
+        # If you want video length in frames and approx duration:
+        logger.info(f"Total frames processed: {frame_count}")
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        video_duration = frame_count / fps if fps > 0 else 0
+        logger.info(f"Approx video duration: {video_duration:.2f} seconds at {fps:.2f} FPS")
+
 
 if __name__ == "__main__":
     main()
