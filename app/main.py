@@ -88,7 +88,6 @@ def main():
 
             logger.debug(f"Frame {frame_count}: {len(tracked_objects)} tracked objects")
 
-
             # Run DeepFace for new IDs
             for track in tracked_objects:
 
