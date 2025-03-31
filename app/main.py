@@ -134,6 +134,9 @@ def main():
                     identified_identities[track_id] = person_name
                     seen_ids.add(track_id)
                     logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
+                    end_time = time.time()
+                    elapsed_time = end_time - start_time
+                    logger.info(f"{person_name} identified in {elapsed_time:.2f} seconds")
                 else:
                     logger.info(f"Frame {frame_count} captured but ID {track_id} could not be identified")
 
