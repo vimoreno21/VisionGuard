@@ -2,11 +2,9 @@ import utils.preload
 
 import cv2
 import time
-import threading
-import os
-import sys
 from datetime import datetime
-from mtcnn import MTCNN
+from facenet_pytorch import MTCNN
+import torch
 from camera import setup_camera
 from face_detection import process_frame_for_faces
 from tracking import run_tracking
@@ -40,8 +38,8 @@ def main():
         logger.error("Exiting due to camera failure.")
         return
 
-
-    detector = MTCNN()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    detector = MTCNN(keep_all=True, device=device)
 
     seen_ids = set()
 
@@ -110,13 +108,14 @@ def main():
                         identified_identities.add(person_name)
                     seen_ids.add(track_id)
                     logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
+                    end_time = time.time()
+                    elapsed_time = end_time - start_time
+                    logger.info(f"{person_name} identified in {elapsed_time:.2f} seconds")
                 else:
                     logger.info(f"Frame {frame_count} captured but ID {track_id} could not be identified")
 
             processing_threads.clear()   
                 
-
-
     except KeyboardInterrupt:
         logger.info("\n[INFO] Interrupted by user.")
     except Exception as e:
@@ -134,9 +133,6 @@ def main():
 
         # If you want video length in frames and approx duration:
         logger.info(f"Total frames processed: {frame_count}")
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        video_duration = frame_count / fps if fps > 0 else 0
-        logger.info(f"Approx video duration: {video_duration:.2f} seconds at {fps:.2f} FPS")
 
 
 if __name__ == "__main__":

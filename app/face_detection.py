@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import threading
 import pickle
-from deepface import DeepFace
 import time
 
 from embed import find_match_with_embeddings
@@ -36,9 +35,23 @@ def process_face(face_img, face_location, original_frame, timestamp, img_frame, 
                 # Extract person name from identity
                 person_name = os.path.basename(os.path.dirname(identity))
                 
-                logger.info(f"✅ Frame {img_frame}: match found via {match_type}!"
-                            f"Matched with: {person_name} (Confidence: {confidence:.2f})"
+                logger.info(f"✅ Frame {img_frame}: match found via {match_type}! "
+                            f"Matched with: {person_name} (Confidence: {confidence:.2f}) "
                             f"Full identity: {identity}")
+                
+                # Annotate the original frame with the person's name
+                annotated_frame = original_frame.copy()
+                x, y, w, h = face_location
+                # Draw a rectangle around the face
+                cv2.rectangle(annotated_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                # Put text with the person's name above the face
+                cv2.putText(annotated_frame, person_name, (x, y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                
+                # Save the annotated image
+                filename = os.path.join(matches_dir, f"{timestamp}_frame{img_frame}_{person_name}.jpg")
+                cv2.imwrite(filename, annotated_frame)
+                logger.info(f"Saved annotated image to {filename}")
 
                 if result_dict is not None:
                     result_dict['identity'] = identity
@@ -62,11 +75,6 @@ def process_frame_for_faces(frame, detector, model_name, img_frame, create_threa
     """Process a single frame to detect and recognize faces"""
     # Save this frame (with timestamp) for debugging
     timestamp = current_timestamp()
-    
-    # Create raw images directory if it doesn't exist
-    raw_images_dir = os.path.join(DEBUG_DIR, "raw_images")
-    os.makedirs(raw_images_dir, exist_ok=True)
-
     
     # Detect and crop face
     face_img, face_location = detect_and_crop_face(frame, detector)
@@ -93,57 +101,45 @@ def process_frame_for_faces(frame, detector, model_name, img_frame, create_threa
         return False, None, None
 
 def detect_and_crop_face(frame, detector):
-    """
-    Detect and crop the largest face in the frame
-    Returns: cropped face image or None if no face detected
-    """
-    # Validate input frame
-    if frame is None or frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
-        logger.warning("Warning: Empty frame received in detect_and_crop_face")
+    if frame is None or frame.size == 0:
+        logger.warning("Empty frame received in detect_and_crop_face")
         return None, None
-    
+
     try:
-        # Convert to RGB for MTCNN
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Detect faces
-        results = detector.detect_faces(rgb_frame)
-        logger.debug(f"Face detection results: {len(results)} faces found")
-        
-        if not results:
+        try:
+            boxes, probs = detector.detect(rgb_frame)
+        except RuntimeError as e:
+            if "torch.cat()" in str(e):
+                logger.debug("No faces detected (empty tensor list)")
+                return None, None
+            else:
+                raise e
+
+        if boxes is None or len(boxes) == 0:
             return None, None
-        
-        # Find the largest face based on bounding box area
-        largest_face = max(results, key=lambda x: x['box'][2] * x['box'][3])
-        x, y, w, h = largest_face['box']
-        
-        # Add margin to the face crop
+
+        # Process detections: find largest face, add margin, crop, etc.
+        boxes = boxes.astype(int)
+        areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
+        largest_idx = areas.index(max(areas))
+        x1, y1, x2, y2 = boxes[largest_idx]
+
         margin = 20
         height, width, _ = frame.shape
-        
-        # Adjust coordinates with margin, ensuring they stay within the image boundaries
-        x_new = max(0, x - margin)
-        y_new = max(0, y - margin)
-        w_new = min(width - x_new, w + margin * 2)
-        h_new = min(height - y_new, h + margin * 2)
-        
-        # Validate final dimensions
-        if w_new <= 0 or h_new <= 0:
+        x_new = max(0, x1 - margin)
+        y_new = max(0, y1 - margin)
+        x2_new = min(width - 1, x2 + margin)
+        y2_new = min(height - 1, y2 + margin)
+
+        if x2_new <= x_new or y2_new <= y_new:
             logger.warning("Invalid face dimensions after applying margin")
             return None, None
-            
-        # Crop face and make a copy to avoid reference issues
-        cropped_face = frame[y_new:y_new + h_new, x_new:x_new + w_new].copy()
-        
-        # Final validation of cropped face
-        if cropped_face is None or cropped_face.size == 0:
-            logger.warning("Empty face image after cropping")
-            return None, None
-            
-        face_location = (x_new, y_new, w_new, h_new)
-        
+
+        cropped_face = frame[y_new:y2_new, x_new:x2_new].copy()
+        face_location = (x_new, y_new, x2_new - x_new, y2_new - y_new)
         return cropped_face, face_location
-        
+
     except Exception as e:
         logger.exception(f"Error during face detection: {e}")
         return None, None

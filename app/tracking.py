@@ -1,11 +1,13 @@
 import cv2
 from ultralytics import YOLO
+import torch
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from utils.logger import logger
 
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Initialize YOLO and DeepSORT
 yolo_model = YOLO("yolov8s.pt")
+yolo_model.model.to(device)
 tracker = DeepSort(
     max_age=60,         # Maximum frames to keep track alive without detection
     n_init=2,           # Increase to require more detections for confirmation
