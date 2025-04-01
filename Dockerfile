@@ -1,13 +1,10 @@
-# Use Ubuntu 20.04 as base (Jetson-compatible)
-FROM ubuntu:20.04
+# Use the JetPack 6 PyTorch base image
+FROM dustynv/l4t-pytorch:r36.2.0
 
-# Set environment variables
+# Set environment variables for non-interactive installs and CUDA paths
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/usr/local/cuda/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/hdf5/serial:/usr/local/cuda/lib64"
-
-
-# Added environment variables for hardware acceleration
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
 
@@ -23,33 +20,22 @@ RUN apt-get update && apt-get install -y \
     hdf5-tools ffmpeg curl wget unzip git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir python-dotenv==1.0.1
-
-# # Add missing symlink for ffmpeg libffi issue
-# RUN ln -s /usr/lib/aarch64-linux-gnu/libffi.so.7 /usr/lib/aarch64-linux-gnu/libffi.so.8
-
-# Make sure HDF5 is linked correctly
+# Ensure HDF5 is linked correctly
 RUN ln -s /usr/lib/aarch64-linux-gnu/hdf5/serial/libhdf5.so /usr/lib/libhdf5.so
 
-# Install dependencies in the correct order (this sequence worked in testing)
-# Step 1: Install Cython first (needed for h5py)
+# --------- Begin Python package installations ---------
+# Step 1: Install Cython (needed for h5py)
 RUN pip3 install --no-cache-dir cython==0.29.37
 
-# Step 2: Install numpy with specific version
+# Step 2: Install numpy (specific version)
 RUN pip3 install --no-cache-dir numpy==1.23.5
 
 # Step 3: Install h5py with proper HDF5 linkage
 RUN HDF5_DIR=/usr/lib/aarch64-linux-gnu/hdf5/serial pip3 install --no-cache-dir h5py==3.8.0 --no-build-isolation
 
-# Step 4: Install Jetson-specific TensorFlow
-RUN pip3 install --no-cache-dir --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v60 tensorflow==2.10.0
-
-# Step 5: Install Keras with matching version
-RUN pip3 install --no-cache-dir keras==2.10.0
-
-# Step 6: Install remaining dependencies (using system OpenCV instead of pip version)
-RUN pip3 install --no-cache-dir \
-    deepface==0.0.93 \
+# Step 4: Install PyTorch-based dependencies and other project packages
+RUN pip3 install --no-cache-dir --ignore-installed \
+    facenet-pytorch \
     flask==3.0.3 \
     matplotlib==3.5.3 \
     pandas==2.0.3 \
@@ -60,12 +46,10 @@ RUN pip3 install --no-cache-dir \
     fire==0.7.0 \
     gunicorn==23.0.0
 
-# Step 7: Install MTCNN after TensorFlow to ensure compatibility
-RUN pip3 install --no-cache-dir mtcnn==0.1.1
 RUN pip3 install --no-cache-dir deep_sort_realtime
 
-# Set working directory (matching your mount point)
+# Set working directory for your project
 WORKDIR /VisionGuard
 
-# Default command
+# Default command (can be overridden by docker-compose)
 CMD ["python3"]

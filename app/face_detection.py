@@ -3,18 +3,17 @@ import cv2
 import numpy as np
 import threading
 import pickle
-from deepface import DeepFace
 import time
 
 from embed import find_match_with_embeddings
 from utils.photo_utils import current_timestamp, mark_frame_with_face
 from utils.directories import SAVE_DIR, DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
 from utils.constants import MATCH_THRESHOLD
+from utils.logger import logger
 
-def process_face(face_img, face_location, original_frame, timestamp, model_name, result_dict=None):
+
+def process_face(face_img, face_location, cropped_frame, original_frame, timestamp, img_frame, model_name, result_dict=None):
     """Process a detected face for recognition (run in separate thread)"""
-    
-
     try:
         # Create output directories if they don't exist
         detected_faces_dir = os.path.join(OUTPUT_DIR, "detected_faces")
@@ -22,15 +21,8 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
         os.makedirs(detected_faces_dir, exist_ok=True)
         os.makedirs(matches_dir, exist_ok=True)
         
-        # Save the face temporarily
-        temp_path = os.path.join(detected_faces_dir, f"face_{timestamp}.jpg")
-        cv2.imwrite(temp_path, face_img)
-        
         # Find match using precomputed embeddings
-        identity, distance, match_type = find_match_with_embeddings(temp_path, model_name)
-
-        # Create reson variable 
-        reason = "Unassigned reason var"
+        identity, distance, match_type = find_match_with_embeddings(face_img, model_name)
         
         # Determine match confidence
         if identity:
@@ -39,29 +31,31 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
                 # Extract person name from identity
                 person_name = os.path.basename(os.path.dirname(identity))
                 
-                print(f"✅ Match found via {match_type}!")
-                print(f"🔹 Matched with: {person_name} (Confidence: {confidence:.2f})")
-                print(f"🔹 Full identity: {identity}")
+                logger.info(f"✅ Frame {img_frame}: match found via {match_type}! "
+                            f"Matched with: {person_name} (Confidence: {confidence:.2f}) "
+                            f"Full identity: {identity}")
                 
-                # Mark frame with identity and save it
-                marked_frame = mark_frame_with_face(original_frame, face_location, f"{person_name} ({match_type})", confidence)
-                marked_frame_path = os.path.join(matches_dir, f"match_{person_name}_{timestamp}.jpg")
-                cv2.imwrite(marked_frame_path, marked_frame)
+                # Annotate the original frame with the person's name
+                annotated_frame = cropped_frame.copy()
+                x, y, w, h = face_location
+                # Draw a rectangle around the face
+                cv2.rectangle(annotated_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                # Put text with the person's name above the face
+                cv2.putText(annotated_frame, person_name, (x, y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                
+                # Save the annotated image
+                filename = os.path.join(matches_dir, f"{timestamp}_frame{img_frame}_{person_name}.jpg")
+                cv2.imwrite(filename, annotated_frame)
+                logger.info(f"Saved annotated image to {filename}")
 
                 if result_dict is not None:
                     result_dict['identity'] = identity
                 return person_name
             else:
-                print(f"❌ No strong match found (Low confidence: {confidence:.2f})")
-                reason = "Low confidence (Distance too high)"
+                logger.info(f"No strong match found (Low confidence: {confidence:.2f})")
         else:
-            print("❌ No match found in database")
-            reason = "No identity found"
-
-        # Save unknown face with reason
-        marked_frame = mark_frame_with_face(original_frame, face_location, f"Unknown ({reason})")
-        marked_frame_path = os.path.join(matches_dir, f"unknown_{timestamp}.jpg")
-        cv2.imwrite(marked_frame_path, marked_frame)
+            logger.info("No match found in database")
 
         if result_dict is not None:
             result_dict['identity'] = None
@@ -69,23 +63,15 @@ def process_face(face_img, face_location, original_frame, timestamp, model_name,
         return None
 
     except Exception as e:
-        print(f"Error processing face: {e}")
+        logger.exception(f"Error processing face: {e}")
 
-def process_frame_for_faces(frame, detector, model_name, create_thread=False):
+def process_frame_for_faces(full_frame, cropped_frame, detector, model_name, img_frame, create_thread=False):
     """Process a single frame to detect and recognize faces"""
     # Save this frame (with timestamp) for debugging
     timestamp = current_timestamp()
     
-    # Create raw images directory if it doesn't exist
-    raw_images_dir = os.path.join(DEBUG_DIR, "raw_images")
-    os.makedirs(raw_images_dir, exist_ok=True)
-    
-    # # Save raw frame
-    # raw_path = os.path.join(raw_images_dir, f"raw_frame_{timestamp}.jpg")
-    # cv2.imwrite(raw_path, frame)
-    
     # Detect and crop face
-    face_img, face_location = detect_and_crop_face(frame, detector)
+    face_img, face_location = detect_and_crop_face(cropped_frame, detector)
     
     thread = None
     if face_img is not None:
@@ -93,79 +79,61 @@ def process_frame_for_faces(frame, detector, model_name, create_thread=False):
         detected_faces_dir = os.path.join(OUTPUT_DIR, "detected_faces")
         os.makedirs(detected_faces_dir, exist_ok=True)
         
-        # Save the cropped face
-        face_path = os.path.join(detected_faces_dir, f"face_{timestamp}.jpg")
-        cv2.imwrite(face_path, face_img)
-        print(f"✅ Face detected and saved to {face_path}")
-        
         if create_thread:
+            result_dict = {}  # shared dict to hold the result
             # Process face in a separate thread
-            thread = threading.Thread(target=process_face, args=(face_img, face_location, frame, timestamp, model_name))
+            thread = threading.Thread(target=process_face, args=(face_img, face_location, cropped_frame, full_frame, timestamp, img_frame, model_name, result_dict))
             thread.start()  # Note: not setting daemon=True
-            return True, thread, None
+            return True, thread, result_dict
         
         else:
             # Process face directly
-            identity = process_face(face_img, face_location, frame, timestamp, model_name)
+            identity = process_face(face_img, face_location, full_frame, timestamp, model_name)
             return True, None, identity
     else:
-        print("No face detected in this frame")
+        logger.debug("No face detected in this frame")
         return False, None, None
 
 def detect_and_crop_face(frame, detector):
-    """
-    Detect and crop the largest face in the frame
-    Returns: cropped face image or None if no face detected
-    """
-    # Validate input frame
-    if frame is None or frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
-        print("Warning: Empty frame received in detect_and_crop_face")
+    if frame is None or frame.size == 0:
+        logger.warning("Empty frame received in detect_and_crop_face")
         return None, None
-    
+
     try:
-        # Convert to RGB for MTCNN
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Detect faces
-        results = detector.detect_faces(rgb_frame)
-        print(f"Face detection results: {len(results)} faces found")
-        
-        if not results:
+        try:
+            boxes, probs = detector.detect(rgb_frame)
+        except RuntimeError as e:
+            if "torch.cat()" in str(e):
+                logger.debug("No faces detected (empty tensor list)")
+                return None, None
+            else:
+                raise e
+
+        if boxes is None or len(boxes) == 0:
             return None, None
-        
-        # Find the largest face based on bounding box area
-        largest_face = max(results, key=lambda x: x['box'][2] * x['box'][3])
-        x, y, w, h = largest_face['box']
-        
-        # Add margin to the face crop
+
+        # Process detections: find largest face, add margin, crop, etc.
+        boxes = boxes.astype(int)
+        areas = [(box[2]-box[0]) * (box[3]-box[1]) for box in boxes]
+        largest_idx = areas.index(max(areas))
+        x1, y1, x2, y2 = boxes[largest_idx]
+
         margin = 20
         height, width, _ = frame.shape
-        
-        # Adjust coordinates with margin, ensuring they stay within the image boundaries
-        x_new = max(0, x - margin)
-        y_new = max(0, y - margin)
-        w_new = min(width - x_new, w + margin * 2)
-        h_new = min(height - y_new, h + margin * 2)
-        
-        # Validate final dimensions
-        if w_new <= 0 or h_new <= 0:
-            print("Warning: Invalid face dimensions after applying margin")
+        x_new = max(0, x1 - margin)
+        y_new = max(0, y1 - margin)
+        x2_new = min(width - 1, x2 + margin)
+        y2_new = min(height - 1, y2 + margin)
+
+        if x2_new <= x_new or y2_new <= y_new:
+            logger.warning("Invalid face dimensions after applying margin")
             return None, None
-            
-        # Crop face and make a copy to avoid reference issues
-        cropped_face = frame[y_new:y_new + h_new, x_new:x_new + w_new].copy()
-        
-        # Final validation of cropped face
-        if cropped_face is None or cropped_face.size == 0:
-            print("Warning: Empty face image after cropping")
-            return None, None
-            
-        face_location = (x_new, y_new, w_new, h_new)
-        
+
+        cropped_face = frame[y_new:y2_new, x_new:x2_new].copy()
+        face_location = (x_new, y_new, x2_new - x_new, y2_new - y_new)
         return cropped_face, face_location
-        
+
     except Exception as e:
-        print(f"Error during face detection: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Error during face detection: {e}")
         return None, None
