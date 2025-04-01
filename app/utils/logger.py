@@ -6,7 +6,7 @@ from utils.directories import LOG_FILES_DIR
 
 def setup_logger(name="face_recognition", to_file=False):
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     if logger.hasHandlers():
         logger.handlers.clear()

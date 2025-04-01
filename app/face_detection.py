@@ -12,7 +12,7 @@ from utils.constants import MATCH_THRESHOLD
 from utils.logger import logger
 
 
-def process_face(face_img, face_location, original_frame, timestamp, img_frame, model_name, result_dict=None):
+def process_face(face_img, face_location, cropped_frame, original_frame, timestamp, img_frame, model_name, result_dict=None):
     """Process a detected face for recognition (run in separate thread)"""
 
     try:
@@ -40,7 +40,7 @@ def process_face(face_img, face_location, original_frame, timestamp, img_frame, 
                             f"Full identity: {identity}")
                 
                 # Annotate the original frame with the person's name
-                annotated_frame = original_frame.copy()
+                annotated_frame = cropped_frame.copy()
                 x, y, w, h = face_location
                 # Draw a rectangle around the face
                 cv2.rectangle(annotated_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -88,7 +88,7 @@ def process_frame_for_faces(full_frame, cropped_frame, detector, model_name, img
         if create_thread:
             result_dict = {}  # shared dict to hold the result
             # Process face in a separate thread
-            thread = threading.Thread(target=process_face, args=(face_img, face_location, full_frame, timestamp, img_frame, model_name, result_dict))
+            thread = threading.Thread(target=process_face, args=(face_img, face_location, cropped_frame, full_frame, timestamp, img_frame, model_name, result_dict))
             thread.start()  # Note: not setting daemon=True
             return True, thread, result_dict
         

@@ -63,6 +63,12 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
             continue
         try:
             x1, y1, x2, y2 = map(int, track.to_tlbr())
+            # add some padding for the face
+            y1 = max(0, y1 - 50)
+            y2 = min(frame.shape[0], y2 - 300)
+            x1 = max(0, x1 - 50)
+            x2 = min(frame.shape[1], x2 + 50)
+
             # Validate the bounding box coordinates are within frame dimensions
             h, w = frame.shape[:2]
             x1, y1 = max(0, x1), max(0, y1)

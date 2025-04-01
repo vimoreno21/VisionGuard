@@ -102,6 +102,12 @@ def main():
                 # write the names of the identified people on the frame
                 name = identified_identities.get(track_id, "Unknown")
                 x1, y1, x2, y2 = map(int, track.to_tlbr())
+                # add some padding for the face
+                y1 = max(0, y1 - 50)
+                y2 = min(frame.shape[0], y2 - 300)
+                x1 = max(0, x1 - 50)
+                x2 = min(frame.shape[1], x2 + 50)
+
                 cv2.putText(annotated_frame, f"Name: {name}", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 # Save the annotated frame to video
                 video_writer.write(annotated_frame)
@@ -110,6 +116,8 @@ def main():
                     continue  # already identified, skip everything
 
                 logger.info(f"Processing track ID {track_id}")
+                
+                
                 cropped = frame[y1:y2, x1:x2]
 
                 # Process the frame and get the thread if one was created
