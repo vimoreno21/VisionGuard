@@ -46,7 +46,6 @@ RUN pip3 install --no-cache-dir --ignore-installed \
     fire==0.7.0 \
     gunicorn==23.0.0
 
-# Optionally install deep_sort_realtime if your project needs it:
 RUN pip3 install --no-cache-dir deep_sort_realtime
 
 # Set working directory for your project

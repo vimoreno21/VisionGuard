@@ -1,0 +1,10 @@
+services:
+  vision-system:
+    image: docker_vision-system
+    container_name: vision-system
+    runtime: nvidia
+    network_mode: host
+    privileged: true
+    command: /bin/bash
+    stdin_open: true
+    tty: true

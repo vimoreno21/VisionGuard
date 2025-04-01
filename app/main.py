@@ -158,6 +158,5 @@ def main():
         # If you want video length in frames and approx duration:
         logger.info(f"Total frames processed: {frame_count}")
 
-
 if __name__ == "__main__":
     main()

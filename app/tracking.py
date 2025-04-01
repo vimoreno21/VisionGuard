@@ -41,7 +41,6 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
     )
 
     if should_detect:
-        # logger.debug(f"Running detection on frame {frame_count}")
         try:
             detections = yolo_model(frame, classes=[0])[0]  # Only detect people
             for det in detections.boxes.data.tolist():

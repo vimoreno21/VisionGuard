@@ -2,7 +2,6 @@ import os
 import pickle
 import time
 import numpy as np
-# from deepface import DeepFace
 from facenet_pytorch import InceptionResnetV1
 import torch
 from torchvision import transforms

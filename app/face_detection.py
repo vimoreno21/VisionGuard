@@ -14,7 +14,6 @@ from utils.logger import logger
 
 def process_face(face_img, face_location, cropped_frame, original_frame, timestamp, img_frame, model_name, result_dict=None):
     """Process a detected face for recognition (run in separate thread)"""
-
     try:
         # Create output directories if they don't exist
         detected_faces_dir = os.path.join(OUTPUT_DIR, "detected_faces")
@@ -24,9 +23,6 @@ def process_face(face_img, face_location, cropped_frame, original_frame, timesta
         
         # Find match using precomputed embeddings
         identity, distance, match_type = find_match_with_embeddings(face_img, model_name)
-
-        # Create reson variable 
-        # reason = "Unassigned reason var"
         
         # Determine match confidence
         if identity:
@@ -58,10 +54,8 @@ def process_face(face_img, face_location, cropped_frame, original_frame, timesta
                 return person_name
             else:
                 logger.info(f"No strong match found (Low confidence: {confidence:.2f})")
-                # reason = "Low confidence (Distance too high)"
         else:
             logger.info("No match found in database")
-            # reason = "No identity found"
 
         if result_dict is not None:
             result_dict['identity'] = None
