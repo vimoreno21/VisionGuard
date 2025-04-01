@@ -71,13 +71,13 @@ def process_face(face_img, face_location, original_frame, timestamp, img_frame, 
     except Exception as e:
         logger.exception(f"Error processing face: {e}")
 
-def process_frame_for_faces(frame, detector, model_name, img_frame, create_thread=False):
+def process_frame_for_faces(full_frame, cropped_frame, detector, model_name, img_frame, create_thread=False):
     """Process a single frame to detect and recognize faces"""
     # Save this frame (with timestamp) for debugging
     timestamp = current_timestamp()
     
     # Detect and crop face
-    face_img, face_location = detect_and_crop_face(frame, detector)
+    face_img, face_location = detect_and_crop_face(cropped_frame, detector)
     
     thread = None
     if face_img is not None:
@@ -88,13 +88,13 @@ def process_frame_for_faces(frame, detector, model_name, img_frame, create_threa
         if create_thread:
             result_dict = {}  # shared dict to hold the result
             # Process face in a separate thread
-            thread = threading.Thread(target=process_face, args=(face_img, face_location, frame, timestamp, img_frame, model_name, result_dict))
+            thread = threading.Thread(target=process_face, args=(face_img, face_location, full_frame, timestamp, img_frame, model_name, result_dict))
             thread.start()  # Note: not setting daemon=True
             return True, thread, result_dict
         
         else:
             # Process face directly
-            identity = process_face(face_img, face_location, frame, timestamp, model_name)
+            identity = process_face(face_img, face_location, full_frame, timestamp, model_name)
             return True, None, identity
     else:
         logger.debug("No face detected in this frame")
