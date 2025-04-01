@@ -1,6 +1,6 @@
 import os
 
-DB_PATHS = ["victoria", "zdad"] # "victoria", , "other"
+DB_PATHS = ["victoria", "dad"] # "victoria", , "other"
 SAVE_DIR = "./logs/captured_images"
 LOG_FILES_DIR = "./logs/log_files"
 OUTPUT_DIR = "./logs/output_files"

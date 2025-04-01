@@ -20,7 +20,9 @@ RUN apt-get update && apt-get install -y \
     hdf5-tools ffmpeg curl wget unzip git \
     && rm -rf /var/lib/apt/lists/*
 
-# Ensure HDF5 is linked correctly
+RUN pip3 install --no-cache-dir python-dotenv==1.0.1
+
+# Make sure HDF5 is linked correctly
 RUN ln -s /usr/lib/aarch64-linux-gnu/hdf5/serial/libhdf5.so /usr/lib/libhdf5.so
 
 # --------- Begin Python package installations ---------

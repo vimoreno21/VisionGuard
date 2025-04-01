@@ -80,6 +80,7 @@ def main():
             if frame_count % detection_interval != 0:
                 continue  # skip recognition this frame
 
+
             # Get tracking results
             tracked_objects, last_detection_frame, frame = run_tracking(
                 frame, frame_count, last_detection_frame, detection_interval, tracked_objects

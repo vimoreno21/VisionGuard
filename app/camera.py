@@ -13,7 +13,6 @@ CAM_NUM = os.getenv("FRONT_DOOR_CAM")
 CAM2_NUM = os.getenv("STAIRS_CAM")
 RTSP_URL = f"{RTSP_URL_BASE}{CAM2_NUM}"
 
-
 def setup_camera():
     """Set up the camera with retry logic"""
     max_attempts = 5
