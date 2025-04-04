@@ -9,11 +9,11 @@ from camera import setup_camera
 from face_detection import process_frame_for_faces
 from tracking import run_tracking
 from utils.logger import logger
-from utils.directories import SAVE_DIR, DEBUG_DIR, DB_PATHS, LOG_FILES_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
+from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
 from utils.constants import HEADLESS
 
 # Import the precompute_embeddings function from wherever you've defined it
-from embed import precompute_embeddings
+from embed import update_pkls
     
 
 def main():    
@@ -22,7 +22,6 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Output dir: {OUTPUT_DIR}")
     logger.info(f"Debug dir: {DEBUG_DIR}")
-    logger.info(f"DBs: {', '.join(DB_PATHS)}")
     logger.info(f"Embeddings path: {EMBEDDINGS_DIR}")
     logger.info("=" * 60)
 
@@ -30,7 +29,7 @@ def main():
     logger.info("Precomputing face embeddings...")
     # You can try different models: "VGG-Face", "Facenet", "Facenet512", "ArcFace"
     model_name = "Facenet512"
-    precompute_embeddings(model_name)
+    update_pkls(model_name)
     logger.info("Embeddings computation completed")
 
     cap = setup_camera()
