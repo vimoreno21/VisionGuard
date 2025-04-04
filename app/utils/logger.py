@@ -12,7 +12,7 @@ def setup_logger(name="face_recognition", to_file=False):
         logger.handlers.clear()
 
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
     logger.addHandler(console_handler)
 

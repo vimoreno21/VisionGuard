@@ -1,6 +1,5 @@
 import os
 
-DB_PATHS = ["victoria", "dad"] # "victoria", , "other"
 SAVE_DIR = "./logs/captured_images"
 LOG_FILES_DIR = "./logs/log_files"
 OUTPUT_DIR = "./logs/output_files"
@@ -19,11 +18,6 @@ if not os.path.exists(OUTPUT_DIR):
 if not os.path.exists(EMBEDDINGS_DIR):
     os.makedirs(EMBEDDINGS_DIR)
 
-for db in DB_PATHS:
-    db_dir = f"./database/{db}"
-    if not os.path.exists(db_dir):
-        os.makedirs(db_dir)
-        print(f"Created missing database directory: {db_dir}")
         
 # Create debug directory
 DEBUG_DIR = os.path.join(SAVE_DIR, "debug")
