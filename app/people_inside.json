@@ -1,17 +1,12 @@
 {
     "people_inside": [
-      {
-        "name": "Victoria",
-        "face_image": "/api/person/victoria/images/7.jpeg"
-      },
-      {
-        "name": "Jane Smith",
-        "face_image": null
-      },
-      {
-        "name": "Unknown",
-        "face_image": null
-      }
+        {
+            "name": "Unknown",
+            "face_image": null
+        },
+        {
+            "name": "/VisionGuard/server/database/victoria/14.jpg",
+            "face_image": null
+        }
     ]
-  }
-  
+}

@@ -256,7 +256,7 @@ def scan_database(db_path, model_name):
     
     return ref_embeddings, person_embeddings
 
-def update_pkls(model_name, database_root="./database"):
+def update_pkls(model_name, database_root=DATABASE_ROOT):
     """
     Update saved embeddings (.pkl files) with new images added and remove embeddings for images no longer on disk.
     This function scans the database_root directory for subdirectories (each representing a person),

@@ -1,11 +1,11 @@
 import os
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__),"..", ".."))
 
 LOG_FILES_DIR = "./logs/log_files"
 OUTPUT_DIR = "./logs/output_files"
 EMBEDDINGS_DIR = "./embeddings"
-PEOPLE_FILE = os.path.join(BASE_DIR, "people_inside.json")
+PEOPLE_FILE = os.path.join(BASE_DIR, "app" ,"people_inside.json")
 
 DATABASE_ROOT = os.path.join(BASE_DIR, "server", "database")
 

@@ -5,13 +5,13 @@ import time
 import json
 from facenet_pytorch import MTCNN
 import torch
-from threading import Lock
+from threading import RLock
 from utils.photo_utils import current_timestamp
 from camera import setup_camera
 from face_detection import process_frame_for_faces
 from tracking import run_tracking
 from utils.logger import logger
-from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR, PEOPLE_FILE
+from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR, PEOPLE_FILE, DATABASE_ROOT
 from utils.constants import HEADLESS
 
 # Import the precompute_embeddings function from wherever you've defined it
@@ -19,13 +19,24 @@ from embed import update_pkls
 
 # Global data structure for people currently in frame (unknown ones)
 people_inside = []
-people_inside_lock = Lock()
+people_inside_lock = RLock()
 
 def save_people_inside():
-    """Save the current list of people_inside to a JSON file."""
+    """Save the current list of people_inside to a JSON file with extra debug logging."""
     with people_inside_lock:
-        with open(PEOPLE_FILE, "w") as f:
-            json.dump({"people_inside": people_inside}, f)
+        try:
+            logger.debug(f"save_people_inside: PEOPLE_FILE value: {PEOPLE_FILE}")
+            logger.debug(f"save_people_inside: Current people_inside data: {people_inside}")
+            with open(PEOPLE_FILE, "w") as f:
+                json.dump({"people_inside": people_inside}, f, indent=4)
+            logger.info(f"save_people_inside: Successfully wrote to file {PEOPLE_FILE}")
+
+            # For additional confirmation, read the file back
+            with open(PEOPLE_FILE, "r") as f:
+                data = json.load(f)
+            logger.debug(f"save_people_inside: File {PEOPLE_FILE} now contains: {data}")
+        except Exception as e:
+            logger.error(f"save_people_inside: Error writing to file {PEOPLE_FILE}: {e}", exc_info=True)
 
 def update_people_inside(new_person):
     """
@@ -34,11 +45,16 @@ def update_people_inside(new_person):
     """
     global people_inside
     with people_inside_lock:
+        logger.debug(f"update_people_inside: Current people_inside before adding: {people_inside}")
+        logger.debug(f"update_people_inside: New person to add: {new_person}")
+
         # Check by name if the person is already in the list.
         if not any(p.get("name") == new_person.get("name") for p in people_inside):
             people_inside.append(new_person)
-            logger.info(f"Added new unknown person: {new_person}")
+            logger.info(f"update_people_inside: Added new person: {new_person}")
             save_people_inside()  # Persist the updated list to a file
+        else:
+            logger.info(f"update_people_inside: Person {new_person} already exists in people_inside")
 
 def main():    
     logger.info("=" * 60)
@@ -47,6 +63,7 @@ def main():
     logger.info(f"Output dir: {OUTPUT_DIR}")
     logger.info(f"Debug dir: {DEBUG_DIR}")
     logger.info(f"Embeddings path: {EMBEDDINGS_DIR}")
+    logger.info(f"Database root: {DATABASE_ROOT}")
     logger.info("=" * 60)
 
     # Precompute face embeddings for faster recognition
@@ -69,7 +86,7 @@ def main():
     identified_identities = {}
 
     last_detection_frame = 0
-    detection_interval = 4
+    detection_interval = 3
     frame_count = 0
 
     # Keep track of threads we create
@@ -154,12 +171,13 @@ def main():
                 thread.join(timeout=5)
                 person_name = result_dict.get('identity')
 
-                # If no identity is returned, we label it "Unknown"
-                if not person_name:
+                if person_name:
+                    identified_identities[track_id] = person_name
+                    seen_ids.add(track_id)
+                    logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
+                else:
                     person_name = "Unknown"
-                identified_identities[track_id] = person_name
-                seen_ids.add(track_id)
-                logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
+                    logger.info(f"Frame {frame_count} captured but ID {track_id} could not be identified")
 
                 face_image_url = None
 

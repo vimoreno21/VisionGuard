@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 import os, shutil, uvicorn
-import asyncio
+import asyncio, json
 
 # Load environment variables from a .env file (if available)
 load_dotenv()
@@ -13,6 +13,7 @@ app = FastAPI()
 
 # Use environment variables for configuration
 DATABASE_ROOT = os.getenv("DATABASE_ROOT")
+
 PEOPLE_INSIDE_FILE = os.getenv("PEOPLE_INSIDE_FILE")
 
 @app.get("/api/persons")
@@ -110,6 +111,9 @@ async def dashboard(request: Request):
                     "thumbnail": thumbnail,
                     "images": images,
                 })
+    else:
+        # return error message if the database root does not exist
+        return templates.TemplateResponse("error.html", {"request": request, "message": "Database root does not exist."})
 
     return templates.TemplateResponse("dashboard.html", {"request": request, "allowed_access": allowed_access})
 
