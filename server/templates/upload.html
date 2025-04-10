@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<main>
+  <!-- Add Guest Card -->
+  <div class="add-guest-card">
+    <h2>Add Allowed Guest</h2>
+    <div class="add-guest-form">
+      <div class="form-left">
+        <div class="form-group">
+          <label>Guest Name</label>
+          <input type="text" id="guestName" placeholder="Enter guest name">
+        </div>
+        <div class="form-group">
+          <label>Relationship</label>
+          <select id="guestRelationship">
+            <option value="Family Member">Family Member</option>
+            <option value="Friend">Friend</option>
+            <option value="Neighbor">Neighbor</option>
+            <option value="Service Provider">Service Provider</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-right">
+        <div class="photo-upload-area">
+          <div class="camera-icon">📷</div>
+          <p>Drop photos here or click to upload</p>
+          <input type="file" id="photoUpload" style="display: none;" multiple accept="image/*">
+          <button class="upload-btn" id="uploadBtn">Upload Photos</button>
+        </div>
+      </div>
+    </div>
+    <button class="add-guest-btn" id="addGuestBtn" disabled>Add Guest</button>
+  </div>
+</main>
+{% endblock %}

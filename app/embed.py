@@ -7,7 +7,7 @@ import torch
 from torchvision import transforms
 import cv2
 
-from utils.directories import EMBEDDINGS_DIR
+from utils.directories import EMBEDDINGS_DIR, DATABASE_ROOT
 from utils.photo_utils import findCosineDistance
 from utils.logger import logger
 
@@ -119,7 +119,7 @@ def compute_average_embeddings(person_embeddings):
 
     return average_embs
 
-def precompute_embeddings(model_name, database_root="./database"):
+def precompute_embeddings(model_name, database_root=DATABASE_ROOT):
     """
     Main function to precompute and save embeddings for all images in the databases.
     Scans the database_root directory for subdirectories (each representing a person),
@@ -147,6 +147,7 @@ def precompute_embeddings(model_name, database_root="./database"):
     # Ensure the database root exists
     if not os.path.exists(database_root):
         logger.exception(f"Database root path {database_root} does not exist. Exiting precomputation.")
+        raise FileNotFoundError(f"Database root path {database_root} does not exist.")
     
     # Iterate over each subdirectory in the database root, each assumed to represent a person
     for person_folder in os.listdir(database_root):

@@ -11,6 +11,9 @@ app/logs/
 # files made by deepface model
 *.pkl
 
+# files from video stream
+server/static/live
+
 # mac files
 .DS_Store
 

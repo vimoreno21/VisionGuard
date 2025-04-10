@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionGuard Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="logo">
+          <span class="logo-icon">🛡️</span>
+          <h1>VisionGuard</h1>
+        </div>
+        <div class="header-actions">
+          <button class="notification-btn">
+            <span>🔔</span>
+            <span>Notifications</span>
+          </button>
+          <div class="user-avatar">👤</div>
+        </div>
+      </header>
+
+      <!-- Alerts include -->
+      {% include "alerts.html" %}
+
+      <!-- Page content -->
+      {% block content %}{% endblock %}
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <div class="footer-copyright">
+          © 2025 VisionGuard. All rights reserved.
+        </div>
+        <div class="footer-links">
+          <a href="#">Privacy Policy</a>
+          <a href="#">Terms of Service</a>
+          <a href="#">Contact Support</a>
+        </div>
+      </footer>
+    </div>
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+        const uploadBtn = document.getElementById("uploadBtn");
+        const photoUpload = document.getElementById("photoUpload");
+        if (uploadBtn && photoUpload) {
+          uploadBtn.addEventListener("click", function() {
+            photoUpload.click();
+          });
+        }
+      });
+    </script>    
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+        var video = document.getElementById('liveStream');
+        console.log("Video element:", video);
+        if (video) {
+          if (Hls.isSupported()) {
+            console.log("HLS is supported, creating instance...");
+            var hls = new Hls();
+            hls.on(Hls.Events.ERROR, function(event, data) {
+              console.error("HLS error:", data);
+            });
+            hls.loadSource('/static/live/stream.m3u8');
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+              console.log("Manifest parsed, playing video...");
+              video.play();
+            });
+          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            console.log("Native HLS support detected, setting video source...");
+            video.src = '/static/live/stream.m3u8';
+            video.addEventListener('loadedmetadata', function() {
+              console.log("Metadata loaded, playing video...");
+              video.play();
+            });
+          } else {
+            console.error("HLS not supported in this browser");
+          }
+        }
+      });
+    </script>          
+  </body>
+</html>

@@ -2,19 +2,43 @@ import utils.preload
 import os
 import cv2
 import time
+import json
 from facenet_pytorch import MTCNN
 import torch
+from threading import Lock
 from utils.photo_utils import current_timestamp
 from camera import setup_camera
 from face_detection import process_frame_for_faces
 from tracking import run_tracking
 from utils.logger import logger
-from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
+from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR, PEOPLE_FILE
 from utils.constants import HEADLESS
 
 # Import the precompute_embeddings function from wherever you've defined it
 from embed import update_pkls
-    
+
+# Global data structure for people currently in frame (unknown ones)
+people_inside = []
+people_inside_lock = Lock()
+
+def save_people_inside():
+    """Save the current list of people_inside to a JSON file."""
+    with people_inside_lock:
+        with open(PEOPLE_FILE, "w") as f:
+            json.dump({"people_inside": people_inside}, f)
+
+def update_people_inside(new_person):
+    """
+    Add a new person to the people_inside list if they're not already present.
+    new_person should be a dict, for example: {"name": "Unknown", "face_image": "/path/to/face.jpg"}
+    """
+    global people_inside
+    with people_inside_lock:
+        # Check by name if the person is already in the list.
+        if not any(p.get("name") == new_person.get("name") for p in people_inside):
+            people_inside.append(new_person)
+            logger.info(f"Added new unknown person: {new_person}")
+            save_people_inside()  # Persist the updated list to a file
 
 def main():    
     logger.info("=" * 60)
@@ -130,13 +154,20 @@ def main():
                 thread.join(timeout=5)
                 person_name = result_dict.get('identity')
 
-                if person_name:
-                    identified_identities[track_id] = person_name
-                    seen_ids.add(track_id)
-                    logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
-                else:
-                    logger.info(f"Frame {frame_count} captured but ID {track_id} could not be identified")
+                # If no identity is returned, we label it "Unknown"
+                if not person_name:
+                    person_name = "Unknown"
+                identified_identities[track_id] = person_name
+                seen_ids.add(track_id)
+                logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
 
+                face_image_url = None
+
+                # Update the shared list for people inside (whether identified or not)
+                update_people_inside({
+                    "name": person_name,
+                    "face_image": face_image_url
+                })
 
             processing_threads.clear()   
                 
