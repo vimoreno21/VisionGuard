@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<main>
+  <!-- Live Feed Card with Split Layout -->
+  <div class="live-stream-card" style="background-color: white; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin: 30px 0;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h2 style="margin: 0;">Live Camera Feed</h2>
+      <div class="status" style="font-size: 16px; font-weight: bold;">Status: Secure</div>
+    </div>
+    <div class="card-body" style="display: flex;">
+      <!-- Video Section (75% width) -->
+      <div class="video-container" style="flex: 0 0 70%;">
+        <video id="liveStream" controls autoplay muted playsinline style="width: 100%; border-radius: 8px;"></video>
+      </div>
+      <!-- People Inside Section (25% width) -->
+      <div class="people-inside-container" style="flex: 0 0 25%; padding-left: 20px;">
+        <h3 style="margin-top: 0;">People Inside</h3>
+        <div class="people-inside-list" id="people-inside-list">
+          {% for person in people_inside %}
+          <div class="person-card" style="display: flex; align-items: center; margin-bottom: 10px;">
+            {% if person.face_image %}
+              <img src="{{ person.face_image }}" alt="{{ person.name }}" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 10px;">
+            {% else %}
+              <div class="unknown-avatar" style="width: 50px; height: 50px; border-radius: 50%; background-color: #ccc; display: flex; align-items: center; justify-content: center; margin-right: 10px;">
+                <span style="font-size: 12px;">Unknown</span>
+              </div>
+            {% endif %}
+            <span style="font-size: 14px;">{{ person.name }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Allowed Guests List Section -->
+  <div class="guest-list-section" style="background-color: white; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 30px;">
+    <div class="guest-list-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+      <h2 style="margin: 0;">Allowed Guests</h2>
+      <div class="list-controls" style="display: flex; gap: 10px; align-items: center;">
+        <button class="filter-btn" style="background: #f5f5f7; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer;">▼ Filter</button>
+        <button class="sort-btn" style="background: #f5f5f7; border: none; border-radius: 4px; padding: 8px 16px; cursor: pointer;">⇅ Sort</button>
+      </div>
+      <!-- Navigation button to the Allowed Access page -->
+      <div class="add-guest-nav" style="margin-top: 10px;">
+        <a href="/allowed_access" class="add-guest-btn" style="text-decoration: none; padding: 10px 20px; background-color: #0066cc; color: white; border-radius: 4px;">Add Guest</a>
+      </div>
+    </div>
+    
+    <div class="guest-cards" id="guestList" style="margin-top: 20px;">
+      {% for person in allowed_access %}
+      <div class="guest-card" style="border: 1px solid #e1e1e1; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+        <div class="guest-info" style="display: flex; align-items: center;">
+          <div class="guest-avatar" style="width: 50px; height: 50px; border-radius: 50%; background-color: #f5f5f7; display: flex; align-items: center; justify-content: center; margin-right: 15px;">
+            {% if person.thumbnail %}
+              <img src="/api/person/{{ person.name }}/images/{{ person.thumbnail }}" alt="{{ person.name }} thumbnail" style="width:100%; height:auto; border-radius:50%;">
+            {% else %}
+              <span>No Image</span>
+            {% endif %}
+          </div>
+          <div class="guest-details">
+            <h3 style="margin: 0;">{{ person.name }}</h3>
+          </div>
+        </div>
+        <div class="guest-actions" style="margin-top: 10px;">
+          <form action="/delete-person/{{ person.name }}" method="post" onsubmit="return confirm('Are you sure you want to delete {{ person.name }} and all images?');" style="display:inline;">
+            <button type="submit" class="remove-btn" style="background-color: #f5f5f7; border: none; border-radius: 4px; padding: 6px 12px; color: #cc0000; cursor: pointer;">Delete Person</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</main>
+{% endblock %}
+
+

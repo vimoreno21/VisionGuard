@@ -24,8 +24,8 @@ def setup_camera():
             print(f"Attempting to connect to camera: {RTSP_URL}")
             
             # Open the RTSP stream with FFMPEG for better performance
-            # cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
-            cap = cv2.VideoCapture("new_video.mp4")
+            cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
+            # cap = cv2.VideoCapture("new_video.mp4")
 
             # Reduce OpenCV buffer to avoid stale frames
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Keep only 1 frame in buffe

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<main>
+  <!-- Guest List -->
+  <div class="guest-list-section">
+    <div class="guest-list-header">
+      <h2>Allowed Guests</h2>
+      <div class="list-controls">
+        <button class="filter-btn">
+          <span>▼</span> Filter
+        </button>
+        <button class="sort-btn">
+          <span>⇅</span> Sort
+        </button>
+      </div>
+    </div>
+    
+    <div class="guest-cards" id="guestList">
+      <!-- Loop through persons passed from backend -->
+      {% for person in persons %}
+      <div class="guest-card">
+        <div class="guest-info">
+          <div class="guest-avatar">{{ person.thumbnail }}</div>
+          <div class="guest-details">
+            <h3>{{ person.name }}</h3>
+            {% if person.relationship %}
+            <p>{{ person.relationship }}</p>
+            {% endif %}
+          </div>
+        </div>
+        <div class="guest-actions">
+          <a href="/upload?person={{ person.name }}" class="edit-btn">Add Image</a>
+          <form action="/delete-person/{{ person.name }}" method="post" 
+                onsubmit="return confirm('Are you sure you want to delete {{ person.name }} and ALL their images?');">
+            <button type="submit" class="remove-btn">Delete Person</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</main>
+{% endblock %}
