@@ -64,19 +64,6 @@ def update_people_batch(data: dict = Body(...)):
         return {"error": str(e)}, 500
 
 
-# In-memory list (or switch to a DB later)
-CURRENT_PEOPLE = []
-
-# Mount static files and set up templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
-class Person(BaseModel):
-    id: int = Field(..., alias='id')  
-    name: str
-    face_image: str | None = None  # Optional
-
-
 @app.post("/api/update_people_batch")
 def update_people_batch(data: dict = Body(...)):
     global CURRENT_PEOPLE
