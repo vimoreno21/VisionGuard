@@ -7,6 +7,11 @@ from dotenv import load_dotenv
 import os, shutil, uvicorn
 import asyncio, json
 import traceback
+from typing import Optional, Dict
+from fastapi.responses import StreamingResponse
+import cv2
+import time
+from video_stream import add_video_routes, start_video_stream
 
 # Load environment variables from a .env file (if available)
 load_dotenv()
@@ -17,6 +22,11 @@ app = FastAPI()
 DATABASE_ROOT = os.getenv("DATABASE_ROOT")
 API_URL = os.getenv("API_URL")
 PEOPLE_INSIDE_FILE = os.getenv("PEOPLE_INSIDE_FILE")
+CAMERA_USERNAME = os.getenv("CAMERA_USERNAME")
+CAMERA_PASSWORD = os.getenv("CAMERA_PASSWORD")
+IP_ADDRESS = os.getenv("IP_ADDRESS")
+PORT = os.getenv("PORT")
+CAMERA_ID = os.getenv("CAMERA_ID")
 
 # In-memory list (or switch to a DB later)
 CURRENT_PEOPLE = []
@@ -28,42 +38,28 @@ templates = Jinja2Templates(directory="templates")
 class Person(BaseModel):
     id: int = Field(..., alias='id')  
     name: str
-    face_image: str | None = None  # Optional
+    face_image: Optional[str] = None
 
 
 @app.post("/api/update_people_batch")
 def update_people_batch(data: dict = Body(...)):
     global CURRENT_PEOPLE
-    try: 
+    try:
         print("Incoming payload:", data)
         incoming_people = [Person(**p) for p in data.get("people", [])]
 
-        # IDs currently visible
-        active_ids = {p.id for p in incoming_people}
+        # Build a dictionary keyed by ID to automatically deduplicate.
+        # Also skip adding a new person if the name (when not "Unknown") is already present.
+        people_dict: Dict[int, Person] = {}
+        for p in incoming_people:
+            if p.name != "Unknown" and any(existing.name == p.name for existing in people_dict.values()):
+                continue  # Skip adding duplicate names.
+            people_dict[p.id] = p
 
-        # Update or add active people
-        updated = []
-        for new_p in incoming_people:
-            found = False
-            for i, old_p in enumerate(CURRENT_PEOPLE):
-                if old_p.id == new_p.id:
-                    if old_p.name == "Unknown" and new_p.name != "Unknown":
-                        # Avoid name conflict
-                        if not any(p.name == new_p.name for p in CURRENT_PEOPLE if p.id != new_p.id):
-                            CURRENT_PEOPLE[i] = new_p
-                    else:
-                        CURRENT_PEOPLE[i] = new_p
-                    found = True
-                    break
-            if not found:
-                if new_p.name != "Unknown" and any(p.name == new_p.name for p in CURRENT_PEOPLE):
-                    continue  # avoid duplicates
-                CURRENT_PEOPLE.append(new_p)
+        # Update global list with deduplicated people.
+        CURRENT_PEOPLE = list(people_dict.values())
 
-        # Remove people not in current frame
-        CURRENT_PEOPLE = [p for p in CURRENT_PEOPLE if p.id in active_ids]
-
-        return {"status": "ok", "people_tracked": [p.dict() for p in CURRENT_PEOPLE]}
+        return {"status": "ok", "people_tracked": [p.model_dump() for p in CURRENT_PEOPLE]}
     except Exception as e:
         traceback.print_exc()
         return {"error": str(e)}, 500
@@ -76,7 +72,7 @@ async def list_persons():
 
 @app.get("/api/current_people")
 def get_current_people():
-    return {"people": [p.dict() for p in CURRENT_PEOPLE]}
+    return {"people": [p.model_dump() for p in CURRENT_PEOPLE]}
 
 
 @app.get("/api/person/{person_name}/images")
@@ -257,5 +253,11 @@ async def ui_delete_image(person_name: str, filename: str):
             status_code=303
         )
 
+# Add video routes to the app
+add_video_routes(app)
+
 if __name__ == '__main__':
+    # Start the video streaming thread
+    video_thread = start_video_stream()
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
