@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 import cv2
 import time
 from video_stream import add_video_routes, start_video_stream
+import requests
 
 # Load environment variables from a .env file (if available)
 load_dotenv()
@@ -39,6 +40,10 @@ add_video_routes(app)
 print("About to start video stream thread")
 video_thread = start_video_stream()
 print(f"Video thread started: {video_thread}")
+
+@app.get("/render_ip")
+def get_render_ip():
+    return {"render_ip": requests.get("https://api.ipify.org").text}
 
 @app.post("/api/update_people_batch")
 def update_people_batch(data: dict = Body(...)):
