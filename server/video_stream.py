@@ -27,8 +27,8 @@ def get_rtsp_url():
     username = os.getenv("CAMERA_USERNAME")
     password = os.getenv("CAMERA_PASSWORD")
     ip_address = os.getenv("IP_ADDRESS")
-    port = os.getenv("PORT", "554")
-    path = os.getenv("RTSP_PATH", "Streaming/Channels/101")
+    port = os.getenv("CAMERA_PORT")
+    path = os.getenv("RTSP_PATH")
     
     # Build complete URL
     url = f"rtsp://{username}:{password}@{ip_address}:{port}/{path}"
