@@ -9,8 +9,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 yolo_model = YOLO("yolov8s.pt")
 yolo_model.model.to(device)
 tracker = DeepSort(
-    max_age=60,         # Maximum frames to keep track alive without detection
-    n_init=2,           # Increase to require more detections for confirmation
+    max_age=30,         # Maximum frames to keep track alive without detection
+    n_init=3,           # Increase to require more detections for confirmation
     nn_budget=100,      # Number of samples to retain in appearance descriptors
     max_cosine_distance=0.3,  # Lower threshold for better matching
 )

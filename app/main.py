@@ -2,59 +2,35 @@ import utils.preload
 import os
 import cv2
 import time
-import json
 from facenet_pytorch import MTCNN
 import torch
-from threading import RLock
+import requests
 from utils.photo_utils import current_timestamp
 from camera import setup_camera
 from face_detection import process_frame_for_faces
 from tracking import run_tracking
 from utils.logger import logger
-from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR, PEOPLE_FILE, DATABASE_ROOT
-from utils.constants import HEADLESS
+from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR, DATABASE_ROOT
+from utils.constants import API_URL
 
 # Import the precompute_embeddings function from wherever you've defined it
 from embed import update_pkls
 
-# Global data structure for people currently in frame (unknown ones)
-people_inside = []
-people_inside_lock = RLock()
-
-def save_people_inside():
-    """Save the current list of people_inside to a JSON file with extra debug logging."""
-    with people_inside_lock:
-        try:
-            logger.debug(f"save_people_inside: PEOPLE_FILE value: {PEOPLE_FILE}")
-            logger.debug(f"save_people_inside: Current people_inside data: {people_inside}")
-            with open(PEOPLE_FILE, "w") as f:
-                json.dump({"people_inside": people_inside}, f, indent=4)
-            logger.info(f"save_people_inside: Successfully wrote to file {PEOPLE_FILE}")
-
-            # For additional confirmation, read the file back
-            with open(PEOPLE_FILE, "r") as f:
-                data = json.load(f)
-            logger.debug(f"save_people_inside: File {PEOPLE_FILE} now contains: {data}")
-        except Exception as e:
-            logger.error(f"save_people_inside: Error writing to file {PEOPLE_FILE}: {e}", exc_info=True)
-
-def update_people_inside(new_person):
-    """
-    Add a new person to the people_inside list if they're not already present.
-    new_person should be a dict, for example: {"name": "Unknown", "face_image": "/path/to/face.jpg"}
-    """
-    global people_inside
-    with people_inside_lock:
-        logger.debug(f"update_people_inside: Current people_inside before adding: {people_inside}")
-        logger.debug(f"update_people_inside: New person to add: {new_person}")
-
-        # Check by name if the person is already in the list.
-        if not any(p.get("name") == new_person.get("name") for p in people_inside):
-            people_inside.append(new_person)
-            logger.info(f"update_people_inside: Added new person: {new_person}")
-            save_people_inside()  # Persist the updated list to a file
+def send_people_inside_batch(current_people):
+    try:
+        logger.info(f"Sending to backend: {current_people}")
+        response = requests.post(
+            f"{API_URL}/api/update_people_batch",
+            json={"people": current_people}
+        )
+        if response.status_code == 200:
+            logger.info("Sent people_inside batch update.")
         else:
-            logger.info(f"update_people_inside: Person {new_person} already exists in people_inside")
+            logger.warning(f"Server responded with {response.status_code}: {response.text}")
+            raise Exception(f"Failed to update server: {response.status_code}")
+    except Exception as e:
+        logger.error(f"Error sending people_inside batch: {e}")
+        raise e
 
 def main():    
     logger.info("=" * 60)
@@ -81,12 +57,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     detector = MTCNN(keep_all=True, device=device)
 
-    seen_ids = set()
-
     identified_identities = {}
+    
 
     last_detection_frame = 0
-    detection_interval = 3
+    detection_interval = 4
     frame_count = 0
 
     # Keep track of threads we create
@@ -119,7 +94,8 @@ def main():
             
             if frame_count % detection_interval != 0:
                 continue  # skip recognition this frame
-
+            
+            currently_visible = []
 
             # Get tracking results
             tracked_objects, last_detection_frame, frame = run_tracking(
@@ -152,13 +128,18 @@ def main():
                 cv2.putText(annotated_frame, f"Name: {name}", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 # Save the annotated frame to video
                 video_writer.write(annotated_frame)
-    
-                if track_id in seen_ids:
-                    continue  # already identified, skip everything
 
+                currently_visible.append({
+                    "id": track_id,
+                    "name": name,
+                    "face_image": None
+                })
+
+                if track_id in identified_identities:
+                    continue  # already identified, skip everything
+                
                 logger.info(f"Processing track ID {track_id}")
-                
-                
+
                 cropped = frame[y1:y2, x1:x2]
 
                 # Process the frame and get the thread if one was created
@@ -167,25 +148,19 @@ def main():
                 if thread:
                     processing_threads.append((thread, result_dict, track_id))
 
+            
             for thread, result_dict, track_id in processing_threads:
                 thread.join(timeout=5)
                 person_name = result_dict.get('identity')
 
                 if person_name:
                     identified_identities[track_id] = person_name
-                    seen_ids.add(track_id)
                     logger.info(f"Frame {frame_count} captured and ID {track_id} identified as {person_name}")
                 else:
                     person_name = "Unknown"
                     logger.info(f"Frame {frame_count} captured but ID {track_id} could not be identified")
 
-                face_image_url = None
-
-                # Update the shared list for people inside (whether identified or not)
-                update_people_inside({
-                    "name": person_name,
-                    "face_image": face_image_url
-                })
+            send_people_inside_batch(currently_visible)
 
             processing_threads.clear()   
                 
@@ -196,8 +171,6 @@ def main():
     finally:
         if 'cap' in locals() and cap is not None:
             cap.release()
-        if not HEADLESS:
-            cv2.destroyAllWindows()
         logger.info("[INFO] System shutdown complete.")
 
         end_time = time.time()

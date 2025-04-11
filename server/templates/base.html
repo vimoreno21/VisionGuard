@@ -84,59 +84,58 @@
       });
     </script> 
     <script>
-      document.addEventListener("DOMContentLoaded", function() {
-        const ws = new WebSocket("http://127.0.0.1:8000/ws/people_inside"); // Adjust URL for production
-        // debuging statement
-        console.log("WebSocket connection established");
-      
-        ws.onmessage = function(event) {
-          const data = JSON.parse(event.data);
-          const container = document.getElementById("people-inside-list");
-          container.innerHTML = "";  // Clear existing list
-      
-          data.people_inside.forEach(person => {
-            const card = document.createElement("div");
-            card.style.display = "flex";
-            card.style.alignItems = "center";
-            card.style.marginBottom = "10px";
-            
-            let imgOrPlaceholder;
-            if (person.face_image) {
-              imgOrPlaceholder = document.createElement("img");
-              imgOrPlaceholder.src = person.face_image;
-              imgOrPlaceholder.alt = person.name;
-              imgOrPlaceholder.style.width = "50px";
-              imgOrPlaceholder.style.height = "50px";
-              imgOrPlaceholder.style.borderRadius = "50%";
-              imgOrPlaceholder.style.objectFit = "cover";
-              imgOrPlaceholder.style.marginRight = "10px";
-            } else {
-              imgOrPlaceholder = document.createElement("div");
-              imgOrPlaceholder.textContent = "Unknown";
-              imgOrPlaceholder.style.width = "50px";
-              imgOrPlaceholder.style.height = "50px";
-              imgOrPlaceholder.style.borderRadius = "50%";
-              imgOrPlaceholder.style.backgroundColor = "#ccc";
-              imgOrPlaceholder.style.display = "flex";
-              imgOrPlaceholder.style.alignItems = "center";
-              imgOrPlaceholder.style.justifyContent = "center";
-              imgOrPlaceholder.style.marginRight = "10px";
-            }
-            
-            const nameSpan = document.createElement("span");
-            nameSpan.style.fontSize = "14px";
-            nameSpan.textContent = person.name;
-            
-            card.appendChild(imgOrPlaceholder);
-            card.appendChild(nameSpan);
-            container.appendChild(card);
-          });
-        };
-      
-        ws.onerror = function(error) {
-          console.error("WebSocket error:", error);
-        };
+      document.addEventListener("DOMContentLoaded", function () {
+        const container = document.getElementById("people-inside-list");
+
+        function fetchPeopleInside() {
+          fetch("/api/current_people")
+            .then(res => res.json())
+            .then(data => {
+              container.innerHTML = "";
+              data.people.forEach(person => {
+                const card = document.createElement("div");
+                card.style.display = "flex";
+                card.style.alignItems = "center";
+                card.style.marginBottom = "10px";
+
+                let imgOrPlaceholder;
+                if (person.face_image) {
+                  imgOrPlaceholder = document.createElement("img");
+                  imgOrPlaceholder.src = person.face_image;
+                  imgOrPlaceholder.alt = person.name;
+                  imgOrPlaceholder.style.width = "50px";
+                  imgOrPlaceholder.style.height = "50px";
+                  imgOrPlaceholder.style.borderRadius = "50%";
+                  imgOrPlaceholder.style.objectFit = "cover";
+                  imgOrPlaceholder.style.marginRight = "10px";
+                } else {
+                  imgOrPlaceholder = document.createElement("div");
+                  imgOrPlaceholder.textContent = "Unknown";
+                  imgOrPlaceholder.style.width = "50px";
+                  imgOrPlaceholder.style.height = "50px";
+                  imgOrPlaceholder.style.borderRadius = "50%";
+                  imgOrPlaceholder.style.backgroundColor = "#ccc";
+                  imgOrPlaceholder.style.display = "flex";
+                  imgOrPlaceholder.style.alignItems = "center";
+                  imgOrPlaceholder.style.justifyContent = "center";
+                  imgOrPlaceholder.style.marginRight = "10px";
+                }
+
+                const nameSpan = document.createElement("span");
+                nameSpan.style.fontSize = "14px";
+                nameSpan.textContent = person.name;
+
+                card.appendChild(imgOrPlaceholder);
+                card.appendChild(nameSpan);
+                container.appendChild(card);
+              });
+            })
+            .catch(err => console.error("Error fetching people:", err));
+        }
+
+        fetchPeopleInside();
+        setInterval(fetchPeopleInside, 2000);
       });
-      </script>         
+    </script>         
   </body>
 </html>

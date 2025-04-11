@@ -1,10 +1,12 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Request, Form
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import os, shutil, uvicorn
 import asyncio, json
+import traceback
 
 # Load environment variables from a .env file (if available)
 load_dotenv()
@@ -13,27 +15,69 @@ app = FastAPI()
 
 # Use environment variables for configuration
 DATABASE_ROOT = os.getenv("DATABASE_ROOT")
-
+API_URL = os.getenv("API_URL")
 PEOPLE_INSIDE_FILE = os.getenv("PEOPLE_INSIDE_FILE")
+
+# In-memory list (or switch to a DB later)
+CURRENT_PEOPLE = []
+
+# Mount static files and set up templates
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+class Person(BaseModel):
+    id: int = Field(..., alias='id')  
+    name: str
+    face_image: str | None = None  # Optional
+
+
+@app.post("/api/update_people_batch")
+def update_people_batch(data: dict = Body(...)):
+    global CURRENT_PEOPLE
+    try: 
+        print("Incoming payload:", data)
+        incoming_people = [Person(**p) for p in data.get("people", [])]
+
+        # IDs currently visible
+        active_ids = {p.id for p in incoming_people}
+
+        # Update or add active people
+        updated = []
+        for new_p in incoming_people:
+            found = False
+            for i, old_p in enumerate(CURRENT_PEOPLE):
+                if old_p.id == new_p.id:
+                    if old_p.name == "Unknown" and new_p.name != "Unknown":
+                        # Avoid name conflict
+                        if not any(p.name == new_p.name for p in CURRENT_PEOPLE if p.id != new_p.id):
+                            CURRENT_PEOPLE[i] = new_p
+                    else:
+                        CURRENT_PEOPLE[i] = new_p
+                    found = True
+                    break
+            if not found:
+                if new_p.name != "Unknown" and any(p.name == new_p.name for p in CURRENT_PEOPLE):
+                    continue  # avoid duplicates
+                CURRENT_PEOPLE.append(new_p)
+
+        # Remove people not in current frame
+        CURRENT_PEOPLE = [p for p in CURRENT_PEOPLE if p.id in active_ids]
+
+        return {"status": "ok", "people_tracked": [p.dict() for p in CURRENT_PEOPLE]}
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": str(e)}, 500
+
 
 @app.get("/api/persons")
 async def list_persons():
     persons = [d for d in os.listdir(DATABASE_ROOT) if os.path.isdir(os.path.join(DATABASE_ROOT, d))]
     return {"persons": persons}
 
-@app.websocket("/ws/people_inside")
-async def websocket_people_inside(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        while True:
-            # Read the JSON file (you might add file-change detection in production)
-            if os.path.exists(PEOPLE_INSIDE_FILE):
-                with open(PEOPLE_INSIDE_FILE, "r") as f:
-                    data = json.load(f)
-                await websocket.send_text(json.dumps(data))
-            await asyncio.sleep(2)  # Adjust the interval as needed
-    except WebSocketDisconnect:
-        print("WebSocket disconnected")
+@app.get("/api/current_people")
+def get_current_people():
+    return {"people": [p.dict() for p in CURRENT_PEOPLE]}
+
 
 @app.get("/api/person/{person_name}/images")
 async def list_images(person_name: str):
@@ -90,10 +134,6 @@ async def delete_person(person_name: str):
 
 # --- UI Endpoints ---
 
-# Mount static files and set up templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
 # Dashboard page
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -116,6 +156,8 @@ async def dashboard(request: Request):
         return templates.TemplateResponse("error.html", {"request": request, "message": "Database root does not exist."})
 
     return templates.TemplateResponse("dashboard.html", {"request": request, "allowed_access": allowed_access})
+
+
 
 
 # Upload page (GET shows the form)
