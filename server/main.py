@@ -64,6 +64,57 @@ def update_people_batch(data: dict = Body(...)):
         return {"error": str(e)}, 500
 
 
+# In-memory list (or switch to a DB later)
+CURRENT_PEOPLE = []
+
+# Mount static files and set up templates
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+class Person(BaseModel):
+    id: int = Field(..., alias='id')  
+    name: str
+    face_image: str | None = None  # Optional
+
+
+@app.post("/api/update_people_batch")
+def update_people_batch(data: dict = Body(...)):
+    global CURRENT_PEOPLE
+    try: 
+        print("Incoming payload:", data)
+        incoming_people = [Person(**p) for p in data.get("people", [])]
+
+        # IDs currently visible
+        active_ids = {p.id for p in incoming_people}
+
+        # Update or add active people
+        updated = []
+        for new_p in incoming_people:
+            found = False
+            for i, old_p in enumerate(CURRENT_PEOPLE):
+                if old_p.id == new_p.id:
+                    if old_p.name == "Unknown" and new_p.name != "Unknown":
+                        # Avoid name conflict
+                        if not any(p.name == new_p.name for p in CURRENT_PEOPLE if p.id != new_p.id):
+                            CURRENT_PEOPLE[i] = new_p
+                    else:
+                        CURRENT_PEOPLE[i] = new_p
+                    found = True
+                    break
+            if not found:
+                if new_p.name != "Unknown" and any(p.name == new_p.name for p in CURRENT_PEOPLE):
+                    continue  # avoid duplicates
+                CURRENT_PEOPLE.append(new_p)
+
+        # Remove people not in current frame
+        CURRENT_PEOPLE = [p for p in CURRENT_PEOPLE if p.id in active_ids]
+
+        return {"status": "ok", "people_tracked": [p.dict() for p in CURRENT_PEOPLE]}
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": str(e)}, 500
+
+
 @app.get("/api/persons")
 async def list_persons():
     persons = [d for d in os.listdir(DATABASE_ROOT) if os.path.isdir(os.path.join(DATABASE_ROOT, d))]
