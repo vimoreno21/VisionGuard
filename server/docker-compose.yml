@@ -1,13 +1,32 @@
 version: '3.8'
-
 services:
   visionguard-api:
     build: .
-    runtime: runc
+    container_name: visionguard-api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - .env
     volumes:
-      - ./server/uploads:/app/server/uploads
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+      - ./database:/app/database
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RTSP_PROXY_MODE=true
+      - OPENCV_LOG_LEVEL=WARNING
+    # Add explicit network configuration to ensure proper network access
+    networks:
+      - host-network
+    # Add extra capabilities for network operations
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/stream_status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  host-network:
+    driver: bridge

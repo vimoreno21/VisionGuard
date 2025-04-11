@@ -18,16 +18,6 @@ load_dotenv()
 
 app = FastAPI()
 
-# Use environment variables for configuration
-DATABASE_ROOT = os.getenv("DATABASE_ROOT")
-API_URL = os.getenv("API_URL")
-PEOPLE_INSIDE_FILE = os.getenv("PEOPLE_INSIDE_FILE")
-CAMERA_USERNAME = os.getenv("CAMERA_USERNAME")
-CAMERA_PASSWORD = os.getenv("CAMERA_PASSWORD")
-IP_ADDRESS = os.getenv("IP_ADDRESS")
-PORT = os.getenv("PORT")
-CAMERA_ID = os.getenv("CAMERA_ID")
-
 # In-memory list (or switch to a DB later)
 CURRENT_PEOPLE = []
 
@@ -35,11 +25,20 @@ CURRENT_PEOPLE = []
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+DATABASE_ROOT = os.getenv("DATABASE_ROOT")
+
 class Person(BaseModel):
     id: int = Field(..., alias='id')  
     name: str
     face_image: Optional[str] = None
 
+# Add video routes to the app
+add_video_routes(app)
+
+# Initialize video stream at module level
+print("About to start video stream thread")
+video_thread = start_video_stream()
+print(f"Video thread started: {video_thread}")
 
 @app.post("/api/update_people_batch")
 def update_people_batch(data: dict = Body(...)):
@@ -253,8 +252,7 @@ async def ui_delete_image(person_name: str, filename: str):
             status_code=303
         )
 
-# Add video routes to the app
-add_video_routes(app)
+
 
 if __name__ == '__main__':
     # Start the video streaming thread
