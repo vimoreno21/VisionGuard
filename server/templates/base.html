@@ -52,37 +52,6 @@
         }
       });
     </script>    
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script>
-      document.addEventListener("DOMContentLoaded", function() {
-        var video = document.getElementById('liveStream');
-        console.log("Video element:", video);
-        if (video) {
-          if (Hls.isSupported()) {
-            console.log("HLS is supported, creating instance...");
-            var hls = new Hls();
-            hls.on(Hls.Events.ERROR, function(event, data) {
-              console.error("HLS error:", data);
-            });
-            hls.loadSource('/static/live/stream.m3u8');
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-              console.log("Manifest parsed, playing video...");
-              video.play();
-            });
-          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            console.log("Native HLS support detected, setting video source...");
-            video.src = '/static/live/stream.m3u8';
-            video.addEventListener('loadedmetadata', function() {
-              console.log("Metadata loaded, playing video...");
-              video.play();
-            });
-          } else {
-            console.error("HLS not supported in this browser");
-          }
-        }
-      });
-    </script> 
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         const container = document.getElementById("people-inside-list");

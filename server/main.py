@@ -7,16 +7,62 @@ from dotenv import load_dotenv
 import os, shutil, uvicorn
 import asyncio, json
 import traceback
+from typing import Optional, Dict
+from fastapi.responses import StreamingResponse
+import cv2
+import time
+from video_stream import add_video_routes, start_video_stream
 
 # Load environment variables from a .env file (if available)
 load_dotenv()
 
 app = FastAPI()
 
-# Use environment variables for configuration
+# In-memory list (or switch to a DB later)
+CURRENT_PEOPLE = []
+
+# Mount static files and set up templates
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
 DATABASE_ROOT = os.getenv("DATABASE_ROOT")
-API_URL = os.getenv("API_URL")
-PEOPLE_INSIDE_FILE = os.getenv("PEOPLE_INSIDE_FILE")
+
+class Person(BaseModel):
+    id: int = Field(..., alias='id')  
+    name: str
+    face_image: Optional[str] = None
+
+# Add video routes to the app
+add_video_routes(app)
+
+# Initialize video stream at module level
+print("About to start video stream thread")
+video_thread = start_video_stream()
+print(f"Video thread started: {video_thread}")
+
+@app.post("/api/update_people_batch")
+def update_people_batch(data: dict = Body(...)):
+    global CURRENT_PEOPLE
+    try:
+        print("Incoming payload:", data)
+        incoming_people = [Person(**p) for p in data.get("people", [])]
+
+        # Build a dictionary keyed by ID to automatically deduplicate.
+        # Also skip adding a new person if the name (when not "Unknown") is already present.
+        people_dict: Dict[int, Person] = {}
+        for p in incoming_people:
+            if p.name != "Unknown" and any(existing.name == p.name for existing in people_dict.values()):
+                continue  # Skip adding duplicate names.
+            people_dict[p.id] = p
+
+        # Update global list with deduplicated people.
+        CURRENT_PEOPLE = list(people_dict.values())
+
+        return {"status": "ok", "people_tracked": [p.model_dump() for p in CURRENT_PEOPLE]}
+    except Exception as e:
+        traceback.print_exc()
+        return {"error": str(e)}, 500
+
 
 # In-memory list (or switch to a DB later)
 CURRENT_PEOPLE = []
@@ -76,7 +122,7 @@ async def list_persons():
 
 @app.get("/api/current_people")
 def get_current_people():
-    return {"people": [p.dict() for p in CURRENT_PEOPLE]}
+    return {"people": [p.model_dump() for p in CURRENT_PEOPLE]}
 
 
 @app.get("/api/person/{person_name}/images")
@@ -257,5 +303,10 @@ async def ui_delete_image(person_name: str, filename: str):
             status_code=303
         )
 
+
+
 if __name__ == '__main__':
+    # Start the video streaming thread
+    video_thread = start_video_stream()
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
