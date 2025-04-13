@@ -28,7 +28,6 @@ services:
 
 
     environment:
-      - DISPLAY=$DISPLAY
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
       # Add this for better RTSP stability

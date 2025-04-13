@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     libswscale-dev \
     libgstreamer1.0-dev \
     libgstreamer-plugins-base1.0-dev \
+    curl \
+    iputils-ping \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container
@@ -30,8 +33,8 @@ RUN mkdir -p /app/logs /app/data
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Expose the port your app runs on
+# Expose the port your app runs on - we'll actually use Render's PORT variable
 EXPOSE 8000
 
-# Command to run the FastAPI app with Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
+# Run the FastAPI app, using the PORT environment variable provided by Render
+CMD ["sh", "-c", "python main.py"]
