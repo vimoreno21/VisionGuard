@@ -7,11 +7,12 @@ from dotenv import load_dotenv
 import os, shutil, uvicorn
 import asyncio, json
 import traceback
+import subprocess
 from typing import Optional, Dict
 from fastapi.responses import StreamingResponse
 import cv2
 import time
-from video_stream import add_video_routes, start_video_stream
+from video_stream import add_video_routes, start_video_stream, get_rtsp_url
 import requests
 
 # Load environment variables from a .env file (if available)
@@ -26,7 +27,7 @@ CURRENT_PEOPLE = []
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-DATABASE_ROOT = os.getenv("DATABASE_ROOT")
+DATABASE_ROOT = os.environ['DATABASE_ROOT']
 
 class Person(BaseModel):
     id: int = Field(..., alias='id')  
@@ -196,8 +197,6 @@ async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request, "allowed_access": allowed_access})
 
 
-
-
 # Upload page (GET shows the form)
 @app.get("/upload", response_class=HTMLResponse)
 async def upload_page(request: Request):
@@ -295,10 +294,128 @@ async def ui_delete_image(person_name: str, filename: str):
             status_code=303
         )
 
+# --- Diagnostic Endpoints ---
 
+@app.get("/debug/environment")
+def debug_environment():
+    """Return filtered environment information"""
+    # Filter out sensitive information
+    safe_env = {}
+    for key, value in os.environ.items():
+        if any(sensitive in key.lower() for sensitive in 
+               ["password", "secret", "key", "token", "auth"]):
+            safe_env[key] = "***REDACTED***"
+        else:
+            safe_env[key] = value
+    
+    return safe_env
+
+@app.get("/debug/opencv")
+def debug_opencv():
+    """Return OpenCV and FFMPEG information"""
+    try:
+        import cv2
+        
+        # Check if FFMPEG is available
+        ffmpeg_available = hasattr(cv2, "CAP_FFMPEG")
+        
+        # Try to get OpenCV build information
+        build_info = cv2.getBuildInformation() if hasattr(cv2, "getBuildInformation") else "Not available"
+        
+        # Extract FFMPEG section from build info
+        ffmpeg_section = "Not found"
+        if "FFMPEG:" in build_info:
+            start = build_info.find("FFMPEG:")
+            end = build_info.find("\n\n", start)
+            if end > start:
+                ffmpeg_section = build_info[start:end]
+        
+        return {
+            "opencv_version": cv2.__version__,
+            "ffmpeg_available": ffmpeg_available,
+            "ffmpeg_info": ffmpeg_section
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug/rtsp_test")
+async def test_rtsp_connection():
+    """Test RTSP connection and return detailed results"""
+    url, masked_url = get_rtsp_url()
+    
+    try:
+        # Test with OpenCV
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        opencv_success = cap.isOpened()
+        
+        if opencv_success:
+            # Get stream properties
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            
+            # Read one frame to confirm it works
+            ret, frame = cap.read()
+            frame_success = ret
+            
+            # Release the capture
+            cap.release()
+        else:
+            width, height, fps, frame_success = None, None, None, False
+        
+        # Try with ffmpeg command line as fallback test
+        try:
+            # Run ffmpeg with a 3-second timeout
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-loglevel', 'error',
+                '-rtsp_transport', 'tcp',
+                '-i', url,
+                '-t', '1',  # Just capture 1 second
+                '-f', 'null',
+                '-'
+            ]
+            
+            ffmpeg_process = subprocess.run(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=3
+            )
+            
+            ffmpeg_success = ffmpeg_process.returncode == 0
+            ffmpeg_error = ffmpeg_process.stderr.decode('utf-8', errors='ignore')
+        except (subprocess.SubprocessError, OSError) as e:
+            ffmpeg_success = False
+            ffmpeg_error = str(e)
+        
+        return {
+            "url_tested": masked_url,
+            "opencv_test": {
+                "success": opencv_success,
+                "width": width,
+                "height": height,
+                "fps": fps,
+                "frame_read_success": frame_success
+            },
+            "ffmpeg_test": {
+                "success": ffmpeg_success,
+                "error": ffmpeg_error if not ffmpeg_success else None
+            }
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "url_tested": masked_url,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 if __name__ == '__main__':
     # Start the video streaming thread
     video_thread = start_video_stream()
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    # Get port from environment or use 8000
+    port = int(os.environ['PORT']) if 'PORT' in os.environ else 8000
+    
+    uvicorn.run(app, host="0.0.0.0", port=port)
