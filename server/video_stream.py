@@ -8,6 +8,7 @@ import numpy as np
 import re
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse, HTMLResponse
+import gc
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -22,6 +23,7 @@ stream_active = False
 JPEG_QUALITY = int(os.environ['JPEG_QUALITY']) if 'JPEG_QUALITY' in os.environ else 80
 REFRESH_INTERVAL = float(os.environ['REFRESH_INTERVAL']) if 'REFRESH_INTERVAL' in os.environ else 0.033  # ~30 FPS
 DEFAULT_RESOLUTION = (640, 480)
+MAX_FRAMES_BUFFER = 1
 
 def get_rtsp_url():
     """Get RTSP URL from environment variables"""
@@ -142,14 +144,17 @@ def capture_rtsp_stream():
             while True:
                 # Read frame
                 ret, frame = cap.read()
+
+                if ret:
+                    # Resize frame to reduce memory usage (640x480 or similar)
+                    frame = cv2.resize(frame, (640, 480))
+                    # Update the frame with thread-safety
+                    with lock:
+                        latest_frame = frame.copy()
                 
-                if not ret:
+                else:
                     logger.warning("Failed to read frame, reconnecting...")
                     break
-                
-                # Update the frame with thread-safety
-                with lock:
-                    latest_frame = frame.copy()
                 
                 # Log stats occasionally
                 frame_count += 1
@@ -157,6 +162,9 @@ def capture_rtsp_stream():
                     elapsed = time.time() - start_time
                     fps = frame_count / elapsed
                     logger.info(f"Capturing at {fps:.1f} FPS (frame count: {frame_count})")
+                
+                if frame_count % 30 == 0:
+                    gc.collect()
                 
                 # Small sleep to prevent maxing out CPU
                 time.sleep(0.01)
@@ -307,9 +315,12 @@ def generate_mjpeg():
             if frame is None:
                 status_msg = "Connecting to camera..." if not stream_active else "Waiting for video..."
                 frame = create_status_frame(status_msg)
+            else:
+                # Ensure the frame is resized to save memory
+                frame = cv2.resize(frame, (640, 480))
             
-            # Encode as JPEG
-            _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+            # Encode as JPEG with higher compression (lower quality)
+            _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
             
             # Yield the frame
             yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n'
@@ -427,7 +438,7 @@ def add_video_routes(app: FastAPI):
         return HTMLResponse(content=html_content)
 
 def start_video_stream():
-    """Initialize and start video streaming thread with enhanced logging"""
+    """Initialize and start video streaming thread"""
     print("STARTING VIDEO STREAM THREAD - PRINT STATEMENT")
     logger.info("Starting video streaming thread")
     
@@ -438,42 +449,14 @@ def start_video_stream():
         
         # Log OpenCV version and capabilities
         logger.info(f"OpenCV version: {cv2.__version__}")
-        logger.info(f"FFMPEG support: {hasattr(cv2, 'CAP_FFMPEG')}")
         
-        # Determine if we're running on Render
-        on_render = 'RENDER' in os.environ
-        logger.info(f"Running on Render: {on_render}")
+        # Start with OpenCV approach first
+        thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
+        thread.start()
         
-        # Start the appropriate thread based on environment
-        if on_render:
-            # On Render, try both methods for maximum chance of success
-            threads = []
-            
-            # Start standard OpenCV capture
-            opencv_thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
-            opencv_thread.start()
-            threads.append(opencv_thread)
-            
-            # Also start FFMPEG fallback on a short delay
-            def delayed_ffmpeg():
-                logger.info("Waiting 10 seconds before starting FFMPEG fallback...")
-                time.sleep(10)
-                ffmpeg_thread = threading.Thread(target=start_ffmpeg_stream, daemon=True)
-                ffmpeg_thread.start()
-                
-            threading.Thread(target=delayed_ffmpeg, daemon=True).start()
-            
-            logger.info("Started multiple video streaming threads with fallback")
-            return threads
-        else:
-            # When local, just use OpenCV as it works locally
-            thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
-            thread.start()
-            logger.info("Video streaming thread started successfully")
-            return [thread]
-            
+        logger.info("Video streaming thread started successfully")
+        return [thread]
     except Exception as e:
         logger.error(f"Error starting video thread: {str(e)}")
-        logger.exception("Detailed stack trace:")
         print(f"ERROR STARTING VIDEO THREAD: {str(e)}")
         return None
