@@ -56,6 +56,8 @@
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         const container = document.getElementById("people-inside-list");
+        const statusElem = document.getElementById("security-status");
+        statusElem.textContent = "Status: " + (data.system_status || "unknown");
 
         function fetchPeopleInside() {
           fetch("/api/current_people")
