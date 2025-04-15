@@ -68,6 +68,7 @@ def update_people_batch(data: dict = Body(...)):
         traceback.print_exc()
         return {"error": str(e)}, 500
 
+
 @app.get("/api/supabase/persons")
 async def list_persons_supabase():
     metadata = load_metadata()
