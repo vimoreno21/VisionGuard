@@ -7,9 +7,10 @@ import torch
 from torchvision import transforms
 import cv2
 
-from utils.directories import EMBEDDINGS_DIR, DATABASE_ROOT
+from utils.directories import EMBEDDINGS_DIR
 from utils.photo_utils import findCosineDistance
 from utils.logger import logger
+from utils.load_database import get_image_map_from_metadata, supabase, SUPABASE_BUCKET
 
 # Global variables to store precomputed embeddings
 reference_embeddings = {}
@@ -102,7 +103,7 @@ def compute_average_embeddings(person_embeddings):
             continue  # Skip to prevent crash
         
         if not embeddings:  # Skip empty lists
-            logger.warning(f"⚠️ Warning: No embeddings found for {person}, skipping.")
+            logger.warning(f"Warning: No embeddings found for {person}, skipping.")
             continue
         
         # Convert list to numpy array
@@ -115,65 +116,59 @@ def compute_average_embeddings(person_embeddings):
         avg_embedding = np.mean(embeddings_array, axis=0)
         average_embs[person] = avg_embedding
 
-        logger.debug(f"✅ Created average embedding for {person} from {len(embeddings)} images")
+        logger.debug(f"Created average embedding for {person} from {len(embeddings)} images")
 
     return average_embs
 
-def precompute_embeddings(model_name, database_root=DATABASE_ROOT):
+def precompute_embeddings(model_name):
     """
-    Main function to precompute and save embeddings for all images in the databases.
-    Scans the database_root directory for subdirectories (each representing a person),
-    computes embeddings for all images, groups them by person, computes average embeddings,
-    and saves the results.
+    Compute embeddings from Supabase using metadata.json.
+    Saves both individual and average embeddings to disk.
     """
-
     global reference_embeddings, average_embeddings
-    
-    logger.debug("Precomputing face embeddings for reference images...")
-    
-    # Try to load existing embeddings first
+
+    logger.debug("⚙️ Precomputing face embeddings using metadata.json...")
+
+    # Step 1: Try loading saved embeddings
     loaded_ref, loaded_avg = load_saved_embeddings(model_name)
     if loaded_ref and loaded_avg:
         reference_embeddings = loaded_ref
         average_embeddings = loaded_avg
-        logger.debug("Successfully loaded precomputed embeddings")
-    else:
-        logger.debug("No saved embeddings found. Computing now...")
-    
-    # Initialize dictionaries for reference embeddings and person-specific embeddings
+        logger.debug("Loaded saved embeddings from disk")
+        return reference_embeddings, average_embeddings
+
+    # Step 2: Fresh init
     reference_embeddings = {}
-    all_person_embeddings = {}  # To store embeddings grouped by person
-    
-    # Ensure the database root exists
-    if not os.path.exists(database_root):
-        logger.exception(f"Database root path {database_root} does not exist. Exiting precomputation.")
-        raise FileNotFoundError(f"Database root path {database_root} does not exist.")
-    
-    # Iterate over each subdirectory in the database root, each assumed to represent a person
-    for person_folder in os.listdir(database_root):
-        db_path = os.path.join(database_root, person_folder)
-        if not os.path.isdir(db_path):
-            continue
-        logger.debug(f"Processing database for person: {person_folder}")
-        
-        # Scan the person's folder and compute embeddings
-        db_ref_embeddings, db_person_embeddings = scan_database(db_path, model_name)
-        
-        # Merge the computed embeddings into the global reference embeddings
-        reference_embeddings.update(db_ref_embeddings)
-        
-        # Merge person-specific embeddings
-        for person, embeddings in db_person_embeddings.items():
-            if person not in all_person_embeddings:
-                all_person_embeddings[person] = []
-            all_person_embeddings[person].extend(embeddings)
-    
-    # Compute average embeddings for each person
+    all_person_embeddings = {}
+
+    # Step 3: Get image list from metadata.json instead of scanning storage
+    metadata = get_image_map_from_metadata()
+
+    for person_name, filenames in metadata.items():
+        for filename in filenames:
+            image_key = filename
+            try:
+                res = supabase.storage.from_(SUPABASE_BUCKET).download(image_key)
+                img_array = cv2.imdecode(np.frombuffer(res, np.uint8), cv2.IMREAD_COLOR)
+                if img_array is None:
+                    logger.warning(f"Could not decode image: {image_key}")
+                    continue
+
+                embedding = compute_embedding_for_image(img_array, model_name)
+                if embedding is not None:
+                    reference_embeddings[image_key] = embedding  # Save embedding under full key
+                    all_person_embeddings.setdefault(person_name, []).append(embedding)
+                    logger.debug(f"Embedded {image_key}")
+            except Exception as e:
+                logger.error(f"Failed to process {image_key}: {e}")
+
+    # Step 4: Compute average embeddings per person
     average_embeddings = compute_average_embeddings(all_person_embeddings)
-    
-    # Save the updated embeddings to disk for future use
+
+    # Step 5: Save everything locally (.pkl)
     save_embeddings(reference_embeddings, average_embeddings, model_name)
-    
+    logger.debug("Embeddings saved to disk")
+
     return reference_embeddings, average_embeddings
 
 def find_match_with_embeddings(face_img, model_name):
@@ -219,106 +214,67 @@ def find_match_with_embeddings(face_img, model_name):
     except Exception as e:
         logger.exception(f"Error in face matching: {e}")
         return None, 1.0, None
-    
-def scan_database(db_path, model_name):
-    """Scan a single database folder and compute embeddings for all images"""
-    
-    ref_embeddings = {}
-    person_embeddings = {}
 
-    for root, dirs, files in os.walk(db_path):
-        for file in files:
-            if file.lower().endswith(('.png', '.jpg', '.jpeg')):
-                image_path = os.path.join(root, file)
-
-                # Get person name
-                person_name = os.path.basename(db_path)  
-                
-                # Compute embedding
-                embedding = compute_embedding_for_image(image_path, model_name)
-                 
-
-                if embedding is not None:
-                    ref_embeddings[image_path] = embedding
-                    
-                    if person_name not in person_embeddings:
-                        person_embeddings[person_name] = []
-
-                    embedding = np.array(embedding)  # Convert to NumPy array
-                    
-                    if embedding.ndim != 1:  # Ensure it's a flat vector
-                        logger.exception(f"❌ ERROR: Unexpected embedding shape {embedding.shape} for {image_path}")
-                        continue
-                    
-                    person_embeddings[person_name].append(embedding)
-
-                    logger.debug(f"✅ Processed: {image_path} (Person: {person_name}) - Shape: {embedding.shape}")
-    
-    return ref_embeddings, person_embeddings
-
-def update_pkls(model_name, database_root=DATABASE_ROOT):
+def update_pkls(model_name):
     """
-    Update saved embeddings (.pkl files) with new images added and remove embeddings for images no longer on disk.
-    This function scans the database_root directory for subdirectories (each representing a person),
-    loads current embeddings, checks for new images, computes embeddings for them,
-    detects removed images, updates the average embeddings, and saves the results.
-    
-    Does not return any values.
+    Update saved embeddings with any new or deleted images based on Supabase metadata.json.
+    Embeddings are saved to local .pkl files.
     """
-    # Load current embeddings if they exist; if not, perform a full precomputation.
+    global reference_embeddings, average_embeddings
+
+    # ✅ Try loading existing embeddings from disk
     ref_embeddings, avg_embeddings = load_saved_embeddings(model_name)
     if ref_embeddings is None or avg_embeddings is None:
         logger.debug("No saved embeddings found. Running full precomputation.")
-        precompute_embeddings(model_name, database_root)
+        precompute_embeddings(model_name)
         return
 
-    new_changes = False  # Flag to indicate if any additions or removals occurred
+    reference_embeddings = ref_embeddings
+    average_embeddings = avg_embeddings
+    new_changes = False
 
-    # Build a set of existing image paths from the filesystem
-    existing_files = set()
-    for person_folder in os.listdir(database_root):
-        person_path = os.path.join(database_root, person_folder)
-        if not os.path.isdir(person_path):
-            continue
-        for root, dirs, files in os.walk(person_path):
-            for file in files:
-                if file.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    image_path = os.path.join(root, file)
-                    existing_files.add(image_path)
-                    # If this image hasn't been processed yet, compute and add its embedding
-                    if image_path not in ref_embeddings:
-                        logger.debug(f"New image detected for {person_folder}: {image_path}")
-                        embedding = compute_embedding_for_image(image_path, model_name)
-                        if embedding is not None:
-                            ref_embeddings[image_path] = embedding
-                            new_changes = True
+    # Load metadata from Supabase to get current known files
+    metadata = get_image_map_from_metadata()
+    current_files = set()
+    
+    for person, filenames in metadata.items():
+        for filename in filenames:
+            current_files.add(filename)
+            if filename not in reference_embeddings:
+                try:
+                    res = supabase.storage.from_(SUPABASE_BUCKET).download(filename)
+                    img_array = cv2.imdecode(np.frombuffer(res, np.uint8), cv2.IMREAD_COLOR)
+                    if img_array is None:
+                        logger.warning(f"Could not decode image: {filename}")
+                        continue
 
-    # Detect and remove embeddings for images that no longer exist on disk
-    for image_path in list(ref_embeddings.keys()):
-        if image_path not in existing_files:
-            logger.debug(f"Image removed: {image_path}")
-            del ref_embeddings[image_path]
+                    embedding = compute_embedding_for_image(img_array, model_name)
+                    if embedding is not None:
+                        reference_embeddings[filename] = embedding
+                        new_changes = True
+                        logger.debug(f"Added new embedding for: {filename}")
+                except Exception as e:
+                    logger.error(f"Error downloading {filename}: {e}")
+
+    # Remove embeddings that no longer exist in metadata
+    for filename in list(reference_embeddings.keys()):
+        if filename not in current_files:
+            del reference_embeddings[filename]
             new_changes = True
+            logger.debug(f"Removed stale embedding: {filename}")
 
-    # Rebuild grouping of embeddings by person from the updated ref_embeddings
+    # Rebuild person-level embedding groups
     person_embeddings = {}
-    for image_path, embedding in ref_embeddings.items():
-        parts = os.path.normpath(image_path).split(os.sep)
-        try:
-            # Use the immediate subdirectory after the database root as the person name.
-            db_index = parts.index(os.path.basename(os.path.normpath(database_root)))
-            person_name = parts[db_index + 1]
-        except (ValueError, IndexError):
-            person_name = "unknown"
-        if person_name not in person_embeddings:
-            person_embeddings[person_name] = []
-        person_embeddings[person_name].append(embedding)
+    for filename, embedding in reference_embeddings.items():
+        person_name = filename.split("_")[0] 
+        person_embeddings.setdefault(person_name, []).append(embedding)
 
-    # If any changes occurred, update the average embeddings and save everything to disk
+    # Save if anything changed
     if new_changes:
-        avg_embeddings = compute_average_embeddings(person_embeddings)
-        save_embeddings(ref_embeddings, avg_embeddings, model_name)
-        logger.debug("Embeddings updated with changes from new or removed images.")
+        average_embeddings = compute_average_embeddings(person_embeddings)
+        save_embeddings(reference_embeddings, average_embeddings, model_name)
+        logger.debug("Embeddings updated and saved to disk")
     else:
         logger.debug("No changes detected. Embeddings remain unchanged.")
+
 
