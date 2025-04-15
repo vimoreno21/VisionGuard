@@ -10,10 +10,10 @@
     <div class="app-container">
       <!-- Header -->
       <header class="app-header">
-        <div class="logo">
+        <a href="/" class="logo" style="text-decoration: none; color: inherit;">
           <span class="logo-icon">🛡️</span>
           <h1>VisionGuard</h1>
-        </div>
+        </a>        
         <div class="header-actions">
           <button class="notification-btn">
             <span>🔔</span>
@@ -51,15 +51,18 @@
           });
         }
       });
-    </script>    
+    </script>   
+     <!--TODO: Make this happen when not on the correct page  -->
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         const container = document.getElementById("people-inside-list");
+        const statusElem = document.getElementById("security-status");
 
         function fetchPeopleInside() {
           fetch("/api/current_people")
             .then(res => res.json())
             .then(data => {
+              statusElem.textContent = "Status: " + (data.system_status || "unknown");
               container.innerHTML = "";
               data.people.forEach(person => {
                 const card = document.createElement("div");

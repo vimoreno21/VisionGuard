@@ -30,7 +30,11 @@ def process_face(face_img, face_location, cropped_frame, original_frame, timesta
             confidence = 1 - distance  # Convert distance to confidence (0-1)
             if distance < MATCH_THRESHOLD:
                 # Extract person name from identity
-                person_name = os.path.basename(os.path.dirname(identity))
+                if "_" in identity:
+                    person_name = identity.split("_", 1)[0]
+                else:
+                    person_name = identity.split(".")[0]
+
                 
                 logger.info(f"✅ Frame {img_frame}: match found via {match_type}! "
                             f"Matched with: {person_name} (Confidence: {confidence:.2f}) "
@@ -52,6 +56,7 @@ def process_face(face_img, face_location, cropped_frame, original_frame, timesta
 
                 if result_dict is not None:
                     result_dict['identity'] = identity
+                    result_dict['person_name'] = person_name
                 return person_name
             else:
                 logger.info(f"No strong match found (Low confidence: {confidence:.2f})")

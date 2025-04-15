@@ -453,6 +453,10 @@ def start_video_stream():
         # Start with OpenCV approach first
         thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
         thread.start()
+
+        # Determine if we're running on Render
+        on_render = 'RENDER' in os.environ
+        logger.info(f"Running on Render: {on_render}")
         
         logger.info("Video streaming thread started successfully")
         return [thread]
