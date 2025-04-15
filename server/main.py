@@ -50,7 +50,6 @@ video_thread = start_video_stream()
 def update_people_batch(data: dict = Body(...)):
     global CURRENT_PEOPLE
     try:
-        print("Incoming payload:", data)
         incoming_people = [Person(**p) for p in data.get("people", [])]
 
         # Build a dictionary keyed by ID to automatically deduplicate.
@@ -144,6 +143,7 @@ async def delete_person(person_name: str):
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     metadata = load_metadata()  # Same helper you use elsewhere
+    current_people = [p.model_dump() for p in CURRENT_PEOPLE]
     persons = []
     print("Metadata loaded:", metadata)
 
@@ -163,7 +163,8 @@ async def dashboard(request: Request):
 
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
-        "persons": persons
+        "persons": persons,
+        "current_people": current_people,
     })
 
 

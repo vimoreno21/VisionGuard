@@ -57,12 +57,12 @@
       document.addEventListener("DOMContentLoaded", function () {
         const container = document.getElementById("people-inside-list");
         const statusElem = document.getElementById("security-status");
-        statusElem.textContent = "Status: " + (data.system_status || "unknown");
 
         function fetchPeopleInside() {
           fetch("/api/current_people")
             .then(res => res.json())
             .then(data => {
+              statusElem.textContent = "Status: " + (data.system_status || "unknown");
               container.innerHTML = "";
               data.people.forEach(person => {
                 const card = document.createElement("div");

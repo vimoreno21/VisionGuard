@@ -5,7 +5,7 @@ from utils.logger import logger
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_BUCKET = "your-bucket-name"
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -16,6 +16,6 @@ def get_image_map_from_metadata():
         metadata = json.loads(res.decode("utf-8"))
         return metadata
     except Exception as e:
-        logger.error(f"Failed to load metadata.json: {e}")
+        logger.exception(f"Failed to load metadata.json from {SUPABASE_BUCKET}: {e}")
         return {}
 
