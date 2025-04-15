@@ -85,7 +85,12 @@ async def list_persons_supabase():
 
 @app.get("/api/current_people")
 def get_current_people():
-    return {"people": [p.model_dump() for p in CURRENT_PEOPLE]}
+    is_secure = all(p.name != "Unknown" for p in CURRENT_PEOPLE)
+    system_status = "secure" if is_secure else "not secure"
+    return {
+        "people": [p.model_dump() for p in CURRENT_PEOPLE],
+        "system_status": system_status
+    }
 
 
 # deleting an image
