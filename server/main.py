@@ -68,6 +68,9 @@ def update_people_batch(data: dict = Body(...)):
         traceback.print_exc()
         return {"error": str(e)}, 500
 
+@app.get("/api/supabase/persons")
+async def list_persons_supabase():
+    metadata = load_metadata()
 
 @app.get("/api/supabase/persons")
 async def list_persons_supabase():
@@ -92,7 +95,6 @@ def get_current_people():
         "system_status": system_status
     }
 
-
 # deleting an image
 @app.post("/api/person/{person_name}/delete/{filename}")
 async def delete_image(person_name: str, filename: str):
@@ -114,7 +116,6 @@ async def delete_image(person_name: str, filename: str):
         url=f"/allowed_access?person={person_name}&message=Deleted+{filename}&success=true",
         status_code=303
     )
-
 
 # deleting a person
 @app.post("/api/person/{person_name}/delete")

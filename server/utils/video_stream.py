@@ -457,7 +457,7 @@ def start_video_stream():
         # Determine if we're running on Render
         on_render = 'RENDER' in os.environ
         logger.info(f"Running on Render: {on_render}")
-        
+
         # Start the appropriate thread based on environment
         if on_render:
             # On Render, try both methods for maximum chance of success
