@@ -72,6 +72,10 @@ def update_people_batch(data: dict = Body(...)):
 async def list_persons_supabase():
     metadata = load_metadata()
 
+@app.get("/api/supabase/persons")
+async def list_persons_supabase():
+    metadata = load_metadata()
+
     # Construct full public URLs
     people = {}
     for person, images in metadata.items():
@@ -90,7 +94,6 @@ def get_current_people():
         "people": [p.model_dump() for p in CURRENT_PEOPLE],
         "system_status": system_status
     }
-
 
 # deleting an image
 @app.post("/api/person/{person_name}/delete/{filename}")
@@ -113,7 +116,6 @@ async def delete_image(person_name: str, filename: str):
         url=f"/allowed_access?person={person_name}&message=Deleted+{filename}&success=true",
         status_code=303
     )
-
 
 # deleting a person
 @app.post("/api/person/{person_name}/delete")

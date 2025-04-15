@@ -438,7 +438,7 @@ def add_video_routes(app: FastAPI):
         return HTMLResponse(content=html_content)
 
 def start_video_stream():
-    """Initialize and start video streaming thread"""
+    """Initialize and start video streaming thread with enhanced logging"""
     print("STARTING VIDEO STREAM THREAD - PRINT STATEMENT")
     logger.info("Starting video streaming thread")
     
@@ -457,13 +457,34 @@ def start_video_stream():
         # Determine if we're running on Render
         on_render = 'RENDER' in os.environ
         logger.info(f"Running on Render: {on_render}")
-        
-        logger.info("Video streaming thread started successfully")
-        return [thread]
-    except Exception as e:
-        logger.error(f"Error starting video thread: {str(e)}")
-        print(f"ERROR STARTING VIDEO THREAD: {str(e)}")
-        return None
+
+        # Start the appropriate thread based on environment
+        if on_render:
+            # On Render, try both methods for maximum chance of success
+            threads = []
+            
+            # Start standard OpenCV capture
+            opencv_thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
+            opencv_thread.start()
+            threads.append(opencv_thread)
+            
+            # Also start FFMPEG fallback on a short delay
+            def delayed_ffmpeg():
+                logger.info("Waiting 10 seconds before starting FFMPEG fallback...")
+                time.sleep(10)
+                ffmpeg_thread = threading.Thread(target=start_ffmpeg_stream, daemon=True)
+                ffmpeg_thread.start()
+                
+            threading.Thread(target=delayed_ffmpeg, daemon=True).start()
+            
+            logger.info("Started multiple video streaming threads with fallback")
+            return threads
+        else:
+            # When local, just use OpenCV as it works locally
+            thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
+            thread.start()
+            logger.info("Video streaming thread started successfully")
+            return [thread]
             
     except Exception as e:
         logger.error(f"Error starting video thread: {str(e)}")
