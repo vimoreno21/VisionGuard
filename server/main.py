@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Request, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Request, Form, Depends
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import os, shutil, uvicorn
@@ -9,7 +10,6 @@ import asyncio, json
 import traceback
 import subprocess
 from typing import Optional, Dict
-from fastapi.responses import StreamingResponse
 from datetime import timedelta
 import cv2
 from utils.helper import load_metadata, sanitize_filename, get_public_url, get_unique_filename
@@ -17,12 +17,12 @@ from utils.video_stream import add_video_routes, start_video_stream, get_rtsp_ur
 from utils.supabase_client import supabase, SUPABASE_BUCKET, SUPABASE_URL
 import io
 # Import authentication modules
-# from auth import (
-#     Token, authenticate_user, create_access_token, 
-#     get_current_active_user, ACCESS_TOKEN_EXPIRE_MINUTES
-# )
+from auth import (
+    authenticate_user, create_access_token, 
+    get_current_active_user, ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
-# Load environment variables from a .env file (if available)
+# Load environment variables from a .env file 
 load_dotenv()
 
 app = FastAPI()
@@ -46,8 +46,54 @@ add_video_routes(app)
 # Initialize video stream at module level
 video_thread = start_video_stream()
 
+# --- Authentication routes ---
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: Optional[str] = None):
+    """Render the login page"""
+    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+
+@app.post("/login")
+async def login(
+    request: Request, 
+    form_data: OAuth2PasswordRequestForm = Depends()
+):
+    """Process login form submission"""
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        return templates.TemplateResponse(
+            "login.html", 
+            {"request": request, "error": "Invalid username or password"},
+            status_code=401
+        )
+    
+    # Create access token with specified expiry time
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": form_data.username}, 
+        expires_delta=access_token_expires
+    )
+    
+    # Set cookie and redirect to homepage
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(
+        key="access_token",
+        value=access_token,  # No Bearer prefix needed
+        httponly=True,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        samesite="lax"
+    )
+    return response
+
+@app.get("/logout")
+async def logout():
+    """Log out by clearing the authentication cookie"""
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(key="access_token")
+    return response
+
+# ---- API Endpoints ----
 @app.post("/api/update_people_batch")
-def update_people_batch(data: dict = Body(...)):
+def update_people_batch(data: dict = Body(...), current_user: str = Depends(get_current_active_user)):
     global CURRENT_PEOPLE
     try:
         incoming_people = [Person(**p) for p in data.get("people", [])]
@@ -69,6 +115,10 @@ def update_people_batch(data: dict = Body(...)):
         return {"error": str(e)}, 500
 
 @app.get("/api/supabase/persons")
+async def list_persons_supabase(current_user: str = Depends(get_current_active_user)):
+    metadata = load_metadata()
+
+@app.get("/api/supabase/persons")
 async def list_persons_supabase():
     metadata = load_metadata()
 
@@ -87,7 +137,7 @@ async def list_persons_supabase():
 
 
 @app.get("/api/current_people")
-def get_current_people():
+def get_current_people(current_user: str = Depends(get_current_active_user)):
     is_secure = all(p.name != "Unknown" for p in CURRENT_PEOPLE)
     system_status = "secure" if is_secure else "not secure"
     return {
@@ -97,7 +147,7 @@ def get_current_people():
 
 # deleting an image
 @app.post("/api/person/{person_name}/delete/{filename}")
-async def delete_image(person_name: str, filename: str):
+async def delete_image(person_name: str, filename: str, current_user: str = Depends(get_current_active_user)):
     file_path = filename
 
     # Delete file from Supabase
@@ -119,7 +169,7 @@ async def delete_image(person_name: str, filename: str):
 
 # deleting a person
 @app.post("/api/person/{person_name}/delete")
-async def delete_person(person_name: str):
+async def delete_person(person_name: str, current_user: str = Depends(get_current_active_user)):
     metadata = load_metadata()
     if person_name not in metadata:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -143,7 +193,7 @@ async def delete_person(person_name: str):
 
 # Dashboard page
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
+async def dashboard(request: Request, current_user: str = Depends(get_current_active_user)):
     metadata = load_metadata()  # Same helper you use elsewhere
     current_people = [p.model_dump() for p in CURRENT_PEOPLE]
     persons = []
@@ -172,7 +222,7 @@ async def dashboard(request: Request):
 
 # Upload page (GET shows the form)
 @app.get("/upload", response_class=HTMLResponse)
-async def upload_page(request: Request):
+async def upload_page(request: Request, current_user: str = Depends(get_current_active_user)):
     return templates.TemplateResponse("upload.html", {"request": request})
 
 
@@ -181,7 +231,7 @@ async def upload_page(request: Request):
 async def handle_upload(
     request: Request,
     person_name: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...), current_user: str = Depends(get_current_active_user)
 ):
     metadata = load_metadata()
     existing_files = [img for imgs in metadata.values() for img in imgs]
@@ -209,7 +259,7 @@ async def handle_upload(
 
 # Alerts page
 @app.get("/alerts", response_class=HTMLResponse)
-async def alerts_page(request: Request):
+async def alerts_page(request: Request, current_user: str = Depends(get_current_active_user)):
     # Replace with actual alert logic; here's dummy data for illustration
     alerts = [{"timestamp": "2023-04-01 12:00", "message": "Unknown person detected", "thumbnail": "/static/images/unknown1.jpg"}]
     return templates.TemplateResponse("alerts.html", {"request": request, "alerts": alerts})
@@ -217,7 +267,7 @@ async def alerts_page(request: Request):
 
 # Current Access page
 @app.get("/current-access", response_class=HTMLResponse)
-async def current_access_page(request: Request):
+async def current_access_page(request: Request, current_user: str = Depends(get_current_active_user)):
     message = request.query_params.get("message", "")
     success = request.query_params.get("success", "true").lower() == "true"
 
@@ -246,7 +296,7 @@ async def current_access_page(request: Request):
     })
 
 @app.get("/allowed_access", response_class=HTMLResponse)
-async def allowed_access(request: Request):
+async def allowed_access(request: Request, current_user: str = Depends(get_current_active_user)):
     selected = request.query_params.get("person")
     metadata = load_metadata()
     persons = []
@@ -269,7 +319,7 @@ async def allowed_access(request: Request):
 # --- Diagnostic Endpoints ---
 
 @app.get("/debug/environment")
-def debug_environment():
+def debug_environment(current_user: str = Depends(get_current_active_user)):
     """Return filtered environment information"""
     # Filter out sensitive information
     safe_env = {}
@@ -283,7 +333,7 @@ def debug_environment():
     return safe_env
 
 @app.get("/debug/opencv")
-def debug_opencv():
+def debug_opencv(current_user: str = Depends(get_current_active_user)):
     """Return OpenCV and FFMPEG information"""
     try:
         import cv2
@@ -311,7 +361,7 @@ def debug_opencv():
         return {"error": str(e)}
 
 @app.get("/debug/rtsp_test")
-async def test_rtsp_connection():
+async def test_rtsp_connection(current_user: str = Depends(get_current_active_user)):
     """Test RTSP connection and return detailed results"""
     url, masked_url = get_rtsp_url()
     
