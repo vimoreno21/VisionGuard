@@ -1,17 +1,15 @@
 import os
+import sys
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__),"..", ".."))
+
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 LOG_FILES_DIR = "./logs/log_files"
 OUTPUT_DIR = "./logs/output_files"
 EMBEDDINGS_DIR = "./embeddings"
 
-DATABASE_ROOT = os.path.join(BASE_DIR, "server", "database")
-
-# Ensure directories exist
-if not os.path.exists(DATABASE_ROOT):
-    # throw an error if the database root directory does not exist
-    raise FileNotFoundError(f"Database root directory does not exist: {DATABASE_ROOT}")
 
 if not os.path.exists(LOG_FILES_DIR):
     os.makedirs(LOG_FILES_DIR)

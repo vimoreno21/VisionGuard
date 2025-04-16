@@ -10,7 +10,7 @@ from camera import setup_camera
 from face_detection import process_frame_for_faces, detect_and_crop_face
 from tracking import run_tracking
 from utils.logger import logger
-from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR, DATABASE_ROOT
+from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
 from utils.constants import API_URL
 import base64
 from io import BytesIO
@@ -45,7 +45,6 @@ def main():
     logger.info(f"Output dir: {OUTPUT_DIR}")
     logger.info(f"Debug dir: {DEBUG_DIR}")
     logger.info(f"Embeddings path: {EMBEDDINGS_DIR}")
-    logger.info(f"Database root: {DATABASE_ROOT}")
     logger.info("=" * 60)
 
     # Precompute face embeddings for faster recognition
