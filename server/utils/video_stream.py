@@ -18,12 +18,24 @@ logger = logging.getLogger("rtsp_stream")
 latest_frame = None
 lock = threading.Lock()
 stream_active = False
+frame_last_accessed = time.time()  # Track when frame was last accessed
 
 # Configuration
-JPEG_QUALITY = int(os.environ['JPEG_QUALITY']) if 'JPEG_QUALITY' in os.environ else 80
-REFRESH_INTERVAL = float(os.environ['REFRESH_INTERVAL']) if 'REFRESH_INTERVAL' in os.environ else 0.033  # ~30 FPS
+JPEG_QUALITY = int(os.environ.get('JPEG_QUALITY', 80))
+REFRESH_INTERVAL = float(os.environ.get('REFRESH_INTERVAL', 0.033))  # ~30 FPS
 DEFAULT_RESOLUTION = (640, 480)
 MAX_FRAMES_BUFFER = 1
+
+# New memory management settings
+FRAME_CLEANUP_INTERVAL = 1.0  # Check and cleanup frames every second
+FRAME_MAX_AGE = 2.0  # Clear frames if not accessed for 2 seconds
+
+# Adaptive performance settings
+ADAPTIVE_FPS = os.environ.get('ADAPTIVE_FPS', 'true').lower() == 'true'
+MIN_REFRESH_INTERVAL = 0.033  # 30 FPS
+MAX_REFRESH_INTERVAL = 0.1    # 10 FPS
+MEMORY_THRESHOLD_MB = int(os.environ.get('MEMORY_THRESHOLD_MB', 1500))  # Throttle if memory exceeds this
+CPU_THRESHOLD = float(os.environ.get('CPU_THRESHOLD', 80.0))  # Throttle if CPU exceeds this percentage
 
 def get_rtsp_url():
     """Get RTSP URL from environment variables"""
@@ -58,6 +70,68 @@ def create_status_frame(message="Connecting to camera...", resolution=DEFAULT_RE
     cv2.putText(img, timestamp, (10, height - 20), font, 0.5, (200, 200, 200), 1)
     
     return img
+
+# Add this new function to manage memory
+def get_system_metrics():
+    """Get current system metrics for adaptive performance"""
+    try:
+        import psutil
+        memory_usage_mb = psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        return memory_usage_mb, cpu_percent
+    except:
+        return 0, 0
+
+def adaptive_refresh_interval():
+    """Dynamically adjust refresh interval based on system load"""
+    if not ADAPTIVE_FPS:
+        return REFRESH_INTERVAL
+        
+    memory_mb, cpu_percent = get_system_metrics()
+    
+    # Scale refresh interval based on memory and CPU usage
+    memory_factor = min(1.0, max(0.0, (memory_mb - MEMORY_THRESHOLD_MB * 0.7) / (MEMORY_THRESHOLD_MB * 0.3)))
+    cpu_factor = min(1.0, max(0.0, (cpu_percent - CPU_THRESHOLD * 0.7) / (CPU_THRESHOLD * 0.3)))
+    
+    # Use the higher of the two factors (more throttling)
+    scale_factor = max(memory_factor, cpu_factor)
+    
+    # Scale the refresh interval between min and max
+    interval = MIN_REFRESH_INTERVAL + scale_factor * (MAX_REFRESH_INTERVAL - MIN_REFRESH_INTERVAL)
+    
+    return interval
+
+def cleanup_frames():
+    """Periodically clean up frames that haven't been accessed recently"""
+    global latest_frame, frame_last_accessed
+    
+    last_metrics_log = time.time()
+    
+    while True:
+        try:
+            current_time = time.time()
+            
+            # Check if frame is too old
+            with lock:
+                if latest_frame is not None and (current_time - frame_last_accessed > FRAME_MAX_AGE):
+                    logger.debug("Clearing old frame from memory")
+                    latest_frame = None
+                    # Run garbage collection after clearing frame
+                    gc.collect()
+            
+            # Log system metrics occasionally
+            if current_time - last_metrics_log > 30:  # Every 30 seconds
+                memory_mb, cpu_percent = get_system_metrics()
+                logger.info(f"System metrics - Memory: {memory_mb:.1f} MB, CPU: {cpu_percent:.1f}%, " +
+                           f"Current refresh interval: {adaptive_refresh_interval():.3f}s")
+                last_metrics_log = current_time
+            
+            # Sleep for the cleanup interval
+            time.sleep(FRAME_CLEANUP_INTERVAL)
+            
+        except Exception as e:
+            logger.error(f"Error in frame cleanup: {str(e)}")
+            time.sleep(FRAME_CLEANUP_INTERVAL)
 
 def capture_rtsp_stream():
     """Capture RTSP stream using OpenCV with enhanced error handling and diagnostics"""
@@ -125,6 +199,9 @@ def capture_rtsp_stream():
                     logger.warning(f"Reset after {max_connection_attempts} failed attempts")
                     connection_attempts = 0
                 
+                # Make sure to release the capture object
+                cap.release()
+                
                 time.sleep(reconnect_delay)
                 continue
             
@@ -146,11 +223,23 @@ def capture_rtsp_stream():
                 ret, frame = cap.read()
 
                 if ret:
-                    # Resize frame to reduce memory usage (640x480 or similar)
-                    frame = cv2.resize(frame, (640, 480))
+                    # Get resolution from environment variables if available
+                    target_width = int(os.environ.get('TARGET_WIDTH', DEFAULT_RESOLUTION[0]))
+                    target_height = int(os.environ.get('TARGET_HEIGHT', DEFAULT_RESOLUTION[1]))
+                    
+                    # Resize frame if needed to match target resolution
+                    if frame.shape[1] != target_width or frame.shape[0] != target_height:
+                        frame = cv2.resize(frame, (target_width, target_height))
+                    
                     # Update the frame with thread-safety
                     with lock:
+                        # Clear previous frame to help garbage collection
+                        latest_frame = None
+                        # Copy new frame
                         latest_frame = frame.copy()
+                        # Update access time
+                        global frame_last_accessed
+                        frame_last_accessed = time.time()
                 
                 else:
                     logger.warning("Failed to read frame, reconnecting...")
@@ -163,7 +252,8 @@ def capture_rtsp_stream():
                     fps = frame_count / elapsed
                     logger.info(f"Capturing at {fps:.1f} FPS (frame count: {frame_count})")
                 
-                if frame_count % 30 == 0:
+                # Run garbage collection periodically
+                if frame_count % 300 == 0:
                     gc.collect()
                 
                 # Small sleep to prevent maxing out CPU
@@ -184,10 +274,16 @@ def capture_rtsp_stream():
             logger.exception("Detailed traceback:")
             stream_active = False
             time.sleep(reconnect_delay)
+        finally:
+            # Make sure we always release the capture object
+            try:
+                cap.release()
+            except:
+                pass
 
 def start_ffmpeg_stream():
     """Start an FFMPEG process to convert RTSP to MJPEG stream as fallback"""
-    global latest_frame, stream_active
+    global latest_frame, stream_active, frame_last_accessed
     
     url, masked_url = get_rtsp_url()
     logger.info(f"Starting FFMPEG fallback for RTSP stream: {masked_url}")
@@ -270,7 +366,10 @@ def start_ffmpeg_stream():
                 
                 # Update the latest frame with thread safety
                 with lock:
+                    # Clear old frame first
+                    latest_frame = None
                     latest_frame = frame.copy()
+                    frame_last_accessed = time.time()
                     
             except Exception as e:
                 logger.error(f"Error processing frame from FFMPEG: {str(e)}")
@@ -298,42 +397,76 @@ def start_ffmpeg_stream():
     start_ffmpeg_stream()
 
 def generate_mjpeg():
-    """Generate MJPEG stream from the latest frame"""
-    global latest_frame
+    """Generate MJPEG stream from the latest frame with adaptive performance"""
+    global latest_frame, frame_last_accessed
     
     logger.info("Client connected to video feed")
     frames_sent = 0
     start_time = time.time()
+    last_gc_time = time.time()
+    client_count = 1  # Start with the assumption that there's at least one client
+    
+    # Get quality settings from environment variables
+    base_jpeg_quality = int(os.environ.get('JPEG_QUALITY', JPEG_QUALITY))
     
     while True:
         try:
+            # Get dynamic refresh interval for adaptive performance
+            current_refresh_interval = adaptive_refresh_interval()
+            
+            # Dynamically adjust JPEG quality based on system load
+            memory_mb, cpu_percent = get_system_metrics()
+            memory_pressure = memory_mb / MEMORY_THRESHOLD_MB
+            
+            # Reduce quality under memory pressure (min quality 40)
+            jpeg_quality = max(40, int(base_jpeg_quality * (1.0 - min(0.5, memory_pressure))))
+            
             # Get latest frame with thread safety
+            current_frame = None
             with lock:
-                frame = latest_frame.copy() if latest_frame is not None else None
+                if latest_frame is not None:
+                    # Use a shallow copy when possible for better performance
+                    current_frame = latest_frame.copy()
+                    # Update access time
+                    frame_last_accessed = time.time()
             
             # If no frame available, create a status frame
-            if frame is None:
+            if current_frame is None:
                 status_msg = "Connecting to camera..." if not stream_active else "Waiting for video..."
-                frame = create_status_frame(status_msg)
-            else:
-                # Ensure the frame is resized to save memory
-                frame = cv2.resize(frame, (640, 480))
+                current_frame = create_status_frame(status_msg)
             
-            # Encode as JPEG with higher compression (lower quality)
-            _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            # Encode as JPEG with dynamic quality control
+            _, jpeg = cv2.imencode('.jpg', current_frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
+            
+            # Explicitly delete the frame copy to help garbage collection
+            current_frame = None
             
             # Yield the frame
-            yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n'
+            frame_data = jpeg.tobytes()
+            yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n'
+            
+            # Clear data after sending
+            frame_data = None
+            jpeg = None
             
             # Update stats
             frames_sent += 1
-            if frames_sent % 100 == 0:
-                elapsed = time.time() - start_time
-                fps = frames_sent / elapsed
-                logger.info(f"Streaming at {fps:.1f} FPS (sent {frames_sent} frames)")
+            current_time = time.time()
             
-            # Control frame rate
-            time.sleep(REFRESH_INTERVAL)
+            # Log periodically
+            if frames_sent % 300 == 0:  # Reduced frequency
+                elapsed = current_time - start_time
+                fps = frames_sent / elapsed
+                logger.info(f"Streaming at {fps:.1f} FPS (sent {frames_sent} frames), " + 
+                           f"Quality: {jpeg_quality}, Interval: {current_refresh_interval:.3f}s")
+            
+            # Run garbage collection periodically
+            if current_time - last_gc_time > 10:  # Every 10 seconds
+                gc.collect()
+                last_gc_time = current_time
+            
+            # Control frame rate with adaptive interval
+            time.sleep(current_refresh_interval)
             
         except Exception as e:
             logger.error(f"Error generating MJPEG: {str(e)}")
@@ -350,18 +483,51 @@ def add_video_routes(app: FastAPI):
             generate_mjpeg(),
             media_type="multipart/x-mixed-replace; boundary=frame"
         )
+        
+    @app.post("/toggle_adaptive")
+    async def toggle_adaptive():
+        """Toggle adaptive FPS mode"""
+        global ADAPTIVE_FPS
+        ADAPTIVE_FPS = not ADAPTIVE_FPS
+        logger.info(f"Adaptive FPS mode {'enabled' if ADAPTIVE_FPS else 'disabled'}")
+        return {"adaptive_mode": ADAPTIVE_FPS}
     
     @app.get("/stream_status")
     async def stream_status():
-        """Get current stream status"""
+        """Get current stream status with enhanced metrics"""
         status = "active" if stream_active else "inactive"
         has_frame = latest_frame is not None
+        
+        # Get detailed system metrics
+        memory_mb, cpu_percent = get_system_metrics()
+        
+        # Get current frame dimensions if available
+        frame_width = None
+        frame_height = None
+        if latest_frame is not None:
+            with lock:
+                if latest_frame is not None:
+                    frame_height, frame_width = latest_frame.shape[:2]
+        
+        # Get current refresh interval (FPS)
+        current_refresh_interval = adaptive_refresh_interval()
+        approx_fps = 1.0 / current_refresh_interval if current_refresh_interval > 0 else 0
+        
+        # Get jpeg quality setting
+        jpeg_quality = int(os.environ.get('JPEG_QUALITY', JPEG_QUALITY))
         
         return {
             "status": status,
             "active": stream_active,
             "has_frame": has_frame,
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            "frame_width": frame_width,
+            "frame_height": frame_height,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "memory_usage_mb": round(memory_mb, 2),
+            "cpu_percent": round(cpu_percent, 1),
+            "current_fps": round(approx_fps, 1),
+            "jpeg_quality": jpeg_quality,
+            "adaptive_mode": ADAPTIVE_FPS
         }
     
     @app.get("/stream")
@@ -384,6 +550,13 @@ def add_video_routes(app: FastAPI):
                 button { margin-top: 10px; padding: 8px 16px; background-color: #2196F3; color: white; 
                         border: none; border-radius: 4px; cursor: pointer; }
                 button:hover { background-color: #0b7dda; }
+                .memory-usage { margin-top: 10px; font-size: 0.9em; color: #666; }
+                .metrics-container { margin-top: 20px; text-align: left; font-size: 0.9em; color: #555; 
+                                    border: 1px solid #ddd; border-radius: 4px; padding: 10px; }
+                .metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+                .metric { margin-bottom: 5px; }
+                .metric-label { font-weight: bold; }
+                .controls { margin-top: 15px; display: flex; gap: 10px; justify-content: center; }
             </style>
         </head>
         <body>
@@ -391,7 +564,49 @@ def add_video_routes(app: FastAPI):
             <div class="video-container">
                 <img src="/video_feed" id="stream" alt="Camera Stream">
                 <div class="status" id="status">Connecting...</div>
-                <button onclick="refreshStream()">Refresh Stream</button>
+                
+                <div class="controls">
+                    <button onclick="refreshStream()">Refresh Stream</button>
+                    <button id="toggle-adaptive" onclick="toggleAdaptiveMode()">Toggle Adaptive Mode</button>
+                </div>
+                
+                <div class="metrics-container">
+                    <h3>Stream Metrics</h3>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <span class="metric-label">Status:</span> 
+                            <span id="metric-status">Checking...</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Memory Usage:</span> 
+                            <span id="metric-memory">Checking...</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">CPU Usage:</span> 
+                            <span id="metric-cpu">Checking...</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Resolution:</span> 
+                            <span id="metric-resolution">Checking...</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Current FPS:</span> 
+                            <span id="metric-fps">Checking...</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">JPEG Quality:</span> 
+                            <span id="metric-quality">Checking...</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Adaptive Mode:</span> 
+                            <span id="metric-adaptive">Checking...</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Time:</span> 
+                            <span id="metric-time">Checking...</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <script>
@@ -402,13 +617,25 @@ def add_video_routes(app: FastAPI):
                     img.src = `/video_feed?t=${timestamp}`;
                 }
                 
+                // Function to toggle adaptive mode
+                function toggleAdaptiveMode() {
+                    fetch('/toggle_adaptive', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            document.getElementById('metric-adaptive').textContent = 
+                                data.adaptive_mode ? 'Enabled' : 'Disabled';
+                            document.getElementById('toggle-adaptive').textContent = 
+                                data.adaptive_mode ? 'Disable Adaptive Mode' : 'Enable Adaptive Mode';
+                        });
+                }
+                
                 // Function to check status
                 function checkStatus() {
                     fetch('/stream_status')
                         .then(response => response.json())
                         .then(data => {
+                            // Update status indicator
                             const statusElement = document.getElementById('status');
-                            
                             if (data.active) {
                                 statusElement.textContent = 'Stream Active';
                                 statusElement.className = 'status active';
@@ -416,6 +643,29 @@ def add_video_routes(app: FastAPI):
                                 statusElement.textContent = 'Stream Inactive - Connecting...';
                                 statusElement.className = 'status inactive';
                             }
+                            
+                            // Update all metrics
+                            document.getElementById('metric-status').textContent = 
+                                data.active ? 'Active' : 'Inactive';
+                            document.getElementById('metric-memory').textContent = 
+                                `${data.memory_usage_mb} MB`;
+                            document.getElementById('metric-cpu').textContent = 
+                                `${data.cpu_percent}%`;
+                            document.getElementById('metric-resolution').textContent = 
+                                data.frame_width && data.frame_height ? 
+                                `${data.frame_width} × ${data.frame_height}` : 'Unknown';
+                            document.getElementById('metric-fps').textContent = 
+                                `${data.current_fps} FPS`;
+                            document.getElementById('metric-quality').textContent = 
+                                `${data.jpeg_quality}`;
+                            document.getElementById('metric-adaptive').textContent = 
+                                data.adaptive_mode ? 'Enabled' : 'Disabled';
+                            document.getElementById('metric-time').textContent = 
+                                data.timestamp;
+                            
+                            // Update button text
+                            document.getElementById('toggle-adaptive').textContent = 
+                                data.adaptive_mode ? 'Disable Adaptive Mode' : 'Enable Adaptive Mode';
                         })
                         .catch(error => {
                             document.getElementById('status').textContent = 'Error checking status';
@@ -443,6 +693,16 @@ def start_video_stream():
     logger.info("Starting video streaming thread")
     
     try:
+        # Try to install psutil for memory monitoring
+        try:
+            import psutil
+        except ImportError:
+            try:
+                logger.info("Installing psutil for memory monitoring")
+                subprocess.check_call(["pip", "install", "psutil"])
+            except:
+                logger.warning("Failed to install psutil - memory monitoring will be limited")
+        
         # Log RTSP URL (with masked password)
         _, masked_url = get_rtsp_url()
         logger.info(f"RTSP URL: {masked_url}")
@@ -450,41 +710,36 @@ def start_video_stream():
         # Log OpenCV version and capabilities
         logger.info(f"OpenCV version: {cv2.__version__}")
         
+        # Start frame cleanup thread
+        cleanup_thread = threading.Thread(target=cleanup_frames, daemon=True)
+        cleanup_thread.start()
+        logger.info("Started frame cleanup thread")
+        
         # Start with OpenCV approach first
-        thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
-        thread.start()
+        opencv_thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
+        opencv_thread.start()
 
         # Determine if we're running on Render
         on_render = 'RENDER' in os.environ
         logger.info(f"Running on Render: {on_render}")
 
-        # Start the appropriate thread based on environment
-        if on_render:
-            # On Render, try both methods for maximum chance of success
-            threads = []
-            
-            # Start standard OpenCV capture
-            opencv_thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
-            opencv_thread.start()
-            threads.append(opencv_thread)
-            
-            # Also start FFMPEG fallback on a short delay
-            def delayed_ffmpeg():
-                logger.info("Waiting 10 seconds before starting FFMPEG fallback...")
-                time.sleep(10)
+        # Also start FFMPEG fallback with a delay
+        def delayed_ffmpeg():
+            logger.info("Waiting 10 seconds before starting FFMPEG fallback...")
+            time.sleep(10)
+            # Only start FFMPEG if OpenCV is still not providing frames
+            global latest_frame
+            if latest_frame is None:
                 ffmpeg_thread = threading.Thread(target=start_ffmpeg_stream, daemon=True)
                 ffmpeg_thread.start()
+                logger.info("Started FFMPEG fallback thread")
+            else:
+                logger.info("OpenCV stream is working, skipping FFMPEG fallback")
                 
-            threading.Thread(target=delayed_ffmpeg, daemon=True).start()
-            
-            logger.info("Started multiple video streaming threads with fallback")
-            return threads
-        else:
-            # When local, just use OpenCV as it works locally
-            thread = threading.Thread(target=capture_rtsp_stream, daemon=True)
-            thread.start()
-            logger.info("Video streaming thread started successfully")
-            return [thread]
+        threading.Thread(target=delayed_ffmpeg, daemon=True).start()
+        
+        logger.info("Video streaming thread started successfully")
+        return [opencv_thread, cleanup_thread]
             
     except Exception as e:
         logger.error(f"Error starting video thread: {str(e)}")

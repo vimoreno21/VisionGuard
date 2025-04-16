@@ -22,13 +22,13 @@ from auth import (
     get_current_active_user, ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
-# Load environment variables from a .env file 
-load_dotenv()
 
+load_dotenv()
 app = FastAPI()
 
-# In-memory list (or switch to a DB later)
+# In-memory list 
 CURRENT_PEOPLE = []
+video_thread = None
 
 # Mount static files and set up templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -40,11 +40,16 @@ class Person(BaseModel):
     name: str
     face_image: Optional[str] = None
 
+def ensure_video_stream_running():
+    global video_thread
+    if video_thread is None:
+        print("Starting video stream")
+        video_thread = start_video_stream()
+    return video_thread
+
 # Add video routes to the app
 add_video_routes(app)
 
-# Initialize video stream at module level
-video_thread = start_video_stream()
 
 # --- Authentication routes ---
 @app.get("/login", response_class=HTMLResponse)
@@ -194,6 +199,9 @@ async def delete_person(person_name: str, current_user: str = Depends(get_curren
 # Dashboard page
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, current_user: str = Depends(get_current_active_user)):
+    # Now that user is authenticated, ensure stream is running
+    ensure_video_stream_running()
+
     metadata = load_metadata()  # Same helper you use elsewhere
     current_people = [p.model_dump() for p in CURRENT_PEOPLE]
     persons = []
@@ -363,6 +371,7 @@ def debug_opencv(current_user: str = Depends(get_current_active_user)):
 @app.get("/debug/rtsp_test")
 async def test_rtsp_connection(current_user: str = Depends(get_current_active_user)):
     """Test RTSP connection and return detailed results"""
+    ensure_video_stream_running()
     url, masked_url = get_rtsp_url()
     
     try:
@@ -434,9 +443,6 @@ async def test_rtsp_connection(current_user: str = Depends(get_current_active_us
         }
 
 if __name__ == '__main__':
-    # Start the video streaming thread
-    video_thread = start_video_stream()
-    
     # Get port from environment or use 8000
     port = int(os.environ['PORT']) if 'PORT' in os.environ else 8000
     
