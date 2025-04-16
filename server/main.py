@@ -98,7 +98,7 @@ async def logout():
 
 # ---- API Endpoints ----
 @app.post("/api/update_people_batch")
-def update_people_batch(data: dict = Body(...), current_user: str = Depends(get_current_active_user)):
+def update_people_batch(data: dict = Body(...)):
     global CURRENT_PEOPLE
     try:
         incoming_people = [Person(**p) for p in data.get("people", [])]
