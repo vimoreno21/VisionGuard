@@ -1,17 +1,8 @@
 import os
 import cv2
 import time
-from dotenv import load_dotenv
-from utils.directories import DEBUG_DIR
-from utils.photo_utils import current_timestamp
+from utils.constants import RTSP_URL
 
-# get env variables
-load_dotenv()
-
-RTSP_URL_BASE = os.getenv("RTSP_URL_BASE")
-CAM_NUM = os.getenv("FRONT_DOOR_CAM")
-CAM2_NUM = os.getenv("STAIRS_CAM")
-RTSP_URL = f"{RTSP_URL_BASE}{CAM2_NUM}"
 
 def setup_camera():
     """Set up the camera with retry logic"""

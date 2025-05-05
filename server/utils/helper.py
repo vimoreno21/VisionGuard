@@ -1,7 +1,8 @@
 import io
 import json
 from fastapi import HTTPException
-from utils.supabase_client import supabase, SUPABASE_BUCKET
+from utils.supabase_client import supabase
+from utils.constants import SUPABASE_URL, SUPABASE_BUCKET
 import re
 import os
 import time
@@ -31,4 +32,4 @@ def load_metadata():
         return {}
 
 def get_public_url(filename):
-    return f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/{SUPABASE_BUCKET}/{filename}"
+    return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{filename}"

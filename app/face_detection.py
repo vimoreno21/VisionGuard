@@ -6,8 +6,8 @@ import pickle
 import time
 
 from embed import find_match_with_embeddings
-from utils.photo_utils import current_timestamp, mark_frame_with_face
-from utils.directories import OUTPUT_DIR
+from utils.photo_utils import current_timestamp
+from utils.directories import MATCHES_DIR
 from utils.constants import MATCH_THRESHOLD
 from utils.logger import logger
 
@@ -16,12 +16,6 @@ def process_face(face_img, face_location, cropped_frame, original_frame, timesta
     """Process a detected face for recognition (run in separate thread)"""
 
     try:
-        # Create output directories if they don't exist
-        detected_faces_dir = os.path.join(OUTPUT_DIR, "detected_faces")
-        matches_dir = os.path.join(OUTPUT_DIR, "matches")
-        os.makedirs(detected_faces_dir, exist_ok=True)
-        os.makedirs(matches_dir, exist_ok=True)
-        
         # Find match using precomputed embeddings
         identity, distance, match_type = find_match_with_embeddings(face_img, model_name)
         
@@ -50,7 +44,7 @@ def process_face(face_img, face_location, cropped_frame, original_frame, timesta
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 
                 # Save the annotated image
-                filename = os.path.join(matches_dir, f"{timestamp}_frame{img_frame}_{person_name}.jpg")
+                filename = os.path.join(MATCHES_DIR, f"{timestamp}_frame{img_frame}_{person_name}.jpg")
                 cv2.imwrite(filename, annotated_frame)
                 logger.info(f"Saved annotated image to {filename}")
 
@@ -81,9 +75,6 @@ def process_frame_for_faces(full_frame, cropped_frame, detector, model_name, img
     
     thread = None
     if face_img is not None:
-        # Make sure output directory exists
-        detected_faces_dir = os.path.join(OUTPUT_DIR, "detected_faces")
-        os.makedirs(detected_faces_dir, exist_ok=True)
         
         if create_thread:
             result_dict = {}  # shared dict to hold the result

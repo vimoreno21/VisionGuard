@@ -2,10 +2,8 @@ from supabase import create_client, Client
 import json
 import os
 from utils.logger import logger
+from utils.constants import SUPABASE_URL, SUPABASE_KEY, SUPABASE_BUCKET
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 

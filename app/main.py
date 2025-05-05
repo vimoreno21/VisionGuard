@@ -5,22 +5,21 @@ import time
 from facenet_pytorch import MTCNN
 import torch
 import requests
+import base64
+from io import BytesIO
+from PIL import Image
+import threading
 from utils.photo_utils import current_timestamp
 from camera import setup_camera
 from face_detection import process_frame_for_faces, detect_and_crop_face
 from tracking import run_tracking
 from utils.logger import logger
-from utils.directories import DEBUG_DIR, EMBEDDINGS_DIR, OUTPUT_DIR
+from utils.directories import EMBEDDINGS_DIR, VIDEO_DIR
 from utils.constants import API_URL
-import base64
-from io import BytesIO
-from PIL import Image
-import threading
-
+from utils.helper import people_changed
 
 # Import the precompute_embeddings function from wherever you've defined it
 from embed import update_pkls
-
 
 def send_people_inside_batch(current_people):
     try:
@@ -42,8 +41,7 @@ def main():
     logger.info("=" * 60)
     logger.info("STARTING CONTINUOUS TRACKING + FACE RECOGNITION")
     logger.info("=" * 60)
-    logger.info(f"Output dir: {OUTPUT_DIR}")
-    logger.info(f"Debug dir: {DEBUG_DIR}")
+    logger.info(f"Video dir: {VIDEO_DIR}")
     logger.info(f"Embeddings path: {EMBEDDINGS_DIR}")
     logger.info("=" * 60)
 
@@ -66,7 +64,7 @@ def main():
     last_sent_people = []
 
     last_detection_frame = 0
-    detection_interval = 5
+    detection_interval = 6
     frame_count = 0
 
     # Keep track of threads we create
@@ -81,7 +79,7 @@ def main():
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps == 0:
         fps = 30  # default if unavailable
-    video_log_path = os.path.join(OUTPUT_DIR, f"log_video_{current_timestamp()}.mp4")
+    video_log_path = os.path.join(VIDEO_DIR, f"log_video_{current_timestamp()}.mp4")
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     video_writer = cv2.VideoWriter(video_log_path, fourcc, fps, (frame_width, frame_height))
     logger.info(f"Video log path: {video_log_path}")
@@ -101,6 +99,10 @@ def main():
                 continue  # skip recognition this frame
             
             currently_visible = []
+
+            
+            # to pass to UI
+            frame_copy = frame.copy()
 
             # Get tracking results
             tracked_objects, last_detection_frame, frame = run_tracking(
@@ -126,8 +128,6 @@ def main():
                 name = identified_identities.get(track_id, "Unknown")
                 x1, y1, x2, y2 = map(int, track.to_tlbr())
 
-                # to pass to UI
-                frame_copy = frame.copy()
 
                 cropped_face, _ = detect_and_crop_face(frame_copy, detector)
 
@@ -187,7 +187,7 @@ def main():
                     logger.info(f"Frame {frame_count} captured but ID {track_id} could not be identified")
 
             # Only send if different from last sent version
-            if currently_visible != last_sent_people:
+            if people_changed(currently_visible, last_sent_people):
                 threading.Thread(target=send_people_inside_batch, args=(currently_visible,), daemon=True).start()
                 last_sent_people = currently_visible.copy()
 

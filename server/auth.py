@@ -5,20 +5,13 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import Optional
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Secret key and algorithm for JWT
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-# Admin credentials from .env
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD") 
+from utils.constants import (
+    SECRET_KEY,
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    ADMIN_USERNAME,
+    ADMIN_PASSWORD
+)
 
 # Token model
 class Token(BaseModel):

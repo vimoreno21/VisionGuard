@@ -135,7 +135,7 @@ async def list_persons_supabase():
     people = {}
     for person, images in metadata.items():
         people[person] = [
-            f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/{SUPABASE_BUCKET}/{img}"
+            f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{img}"
             for img in images
         ]
     return {"persons": people}

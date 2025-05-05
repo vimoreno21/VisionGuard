@@ -4,8 +4,18 @@ from dotenv import load_dotenv
 MATCH_THRESHOLD = 0.5  # Lower values = stricter matching
 
 load_dotenv()
+# to connect to API
 API_URL=os.getenv("API_URL")
-# API_URL = "http://localhost:8000"  # Update this URL
-# API_URL = "http://127.0.0.1:8000"  # Update this URL
+# API_URL = "http://localhost:8000"
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+# to connect to camera
+RTSP_URL_BASE = os.getenv("RTSP_URL_BASE")
+CAM_NUM = os.getenv("FRONT_DOOR_CAM")
+CAM2_NUM = os.getenv("STAIRS_CAM")
+RTSP_URL = f"{RTSP_URL_BASE}{CAM2_NUM}"
+
+
+# for database
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")

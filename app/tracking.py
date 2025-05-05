@@ -10,9 +10,9 @@ yolo_model = YOLO("yolov8s.pt")
 yolo_model.model.to(device)
 tracker = DeepSort(
     max_age=30,         # Maximum frames to keep track alive without detection
-    n_init=3,           # Increase to require more detections for confirmation
+    n_init=4,           # Increase to require more detections for confirmation
     nn_budget=100,      # Number of samples to retain in appearance descriptors
-    max_cosine_distance=0.3,  # Lower threshold for better matching
+    max_cosine_distance=0.4,  # Lower threshold for better matching
 )
 
 def run_tracking(frame, frame_count, last_detection_frame, detection_interval, previous_tracks=None):
@@ -46,7 +46,7 @@ def run_tracking(frame, frame_count, last_detection_frame, detection_interval, p
             detections = yolo_model(frame, classes=[0])[0]  # Only detect people
             for det in detections.boxes.data.tolist():
                 x1, y1, x2, y2, conf, class_id = det
-                if conf > 0.4:
+                if conf > 0.5:
                     detections_list.append([[x1, y1, x2, y2], conf, None])
             last_detection_frame = frame_count
         except Exception as e:
