@@ -19,3 +19,10 @@ RTSP_URL = f"{RTSP_URL_BASE}{CAM2_NUM}"
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
+
+# Parameters for pipeline
+downscale = 0.7
+conf_thresh = 0.9
+pad = 50
+detection_interval = 6
+track_interval = 3
